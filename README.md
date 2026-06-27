@@ -232,8 +232,6 @@ Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://hu
   <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
 </p>
 
----
-
 ## Qualitative Results
 
 <p align="center">
@@ -262,3 +260,49 @@ Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://hu
   <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
   </em>
 </p>
+
+---
+
+## Inference
+
+### Load the 2B Evaluator
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
+repo_id = "vcl-iisc/DynEval-Evaluator"
+
+model = Qwen3VLForConditionalGeneration.from_pretrained(
+    repo_id,
+    subfolder="DynEval-2B",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+processor = AutoProcessor.from_pretrained(
+    repo_id,
+    subfolder="DynEval-2B",
+)
+```
+
+### Load the 4B Evaluator
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
+repo_id = "vcl-iisc/DynEval-Evaluator"
+
+model = Qwen3VLForConditionalGeneration.from_pretrained(
+    repo_id,
+    subfolder="DynEval-4B",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+processor = AutoProcessor.from_pretrained(
+    repo_id,
+    subfolder="DynEval-4B",
+)
+```
