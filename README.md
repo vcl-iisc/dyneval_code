@@ -234,6 +234,52 @@ Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://hu
 
 ---
 
+## Inference
+
+### Load the 2B Evaluator
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
+repo_id = "vcl-iisc/DynEval-Evaluator"
+
+model = Qwen3VLForConditionalGeneration.from_pretrained(
+    repo_id,
+    subfolder="DynEval-2B",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+processor = AutoProcessor.from_pretrained(
+    repo_id,
+    subfolder="DynEval-2B",
+)
+```
+
+### Load the 4B Evaluator
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
+repo_id = "vcl-iisc/DynEval-Evaluator"
+
+model = Qwen3VLForConditionalGeneration.from_pretrained(
+    repo_id,
+    subfolder="DynEval-4B",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+processor = AutoProcessor.from_pretrained(
+    repo_id,
+    subfolder="DynEval-4B",
+)
+```
+
+---
+
 ## Qualitative Results
 
 <p align="center">
