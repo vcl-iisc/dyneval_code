@@ -232,6 +232,35 @@ Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://hu
   <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
 </p>
 
+## Qualitative Results
+
+<p align="center">
+  <img src="assets/geneval_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
+</p>
+
+<p align="center">
+  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
+
+<p align="center">
+  <img src="assets/genai_bench_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
+
+
+
+<p align="center">
+  <img src="assets/fail.png" width="800"/>
+  <br>
+  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
+  </em>
+</p>
+
 ---
 
 ## Inference
@@ -277,34 +306,3 @@ processor = AutoProcessor.from_pretrained(
     subfolder="DynEval-4B",
 )
 ```
-
----
-
-## Qualitative Results
-
-<p align="center">
-  <img src="assets/geneval_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
-</p>
-
-<p align="center">
-  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-<p align="center">
-  <img src="assets/genai_bench_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-
-
-<p align="center">
-  <img src="assets/fail.png" width="800"/>
-  <br>
-  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
-  </em>
-</p>
