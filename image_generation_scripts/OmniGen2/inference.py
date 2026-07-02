@@ -17,10 +17,17 @@ from diffusers.hooks import apply_group_offloading
 from omnigen2.pipelines.omnigen2.pipeline_omnigen2 import OmniGen2Pipeline
 from omnigen2.models.transformers.transformer_omnigen2 import OmniGen2Transformer2DModel
 
+DEFAULT_OUT = "outputs"
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="OmniGen2 image generation script.")
+    parser.add_argument(
+        "prompt",
+        type=str,
+        help="Text prompt for generation.",
+    )
     parser.add_argument(
         "--model_path",
         type=str,
@@ -108,12 +115,6 @@ def parse_args() -> argparse.Namespace:
         help="End of the CFG range."
     )
     parser.add_argument(
-        "--instruction",
-        type=str,
-        default="A dog running in the park",
-        help="Text prompt for generation."
-    )
-    parser.add_argument(
         "--negative_prompt",
         type=str,
         default="(((deformed))), blurry, over saturation, bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), fused fingers, messy drawing, broken legs censor, censored, censor_bar",
@@ -127,10 +128,22 @@ def parse_args() -> argparse.Namespace:
         help="Path(s) to input image(s)."
     )
     parser.add_argument(
-        "--output_image_path",
+        "--output",
+        type=str,
+        default=None,
+        help="Full output image path."
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=DEFAULT_OUT,
+        help="Directory used with --filename."
+    )
+    parser.add_argument(
+        "--filename",
         type=str,
         default="output.png",
-        help="Path to save output image."
+        help="Output filename when --output is not set."
     )
     parser.add_argument(
         "--num_images_per_prompt",
@@ -250,14 +263,14 @@ def preprocess(input_image_path: List[str] = []) -> Tuple[str, str, List[Image.I
 def run(args: argparse.Namespace, 
         accelerator: Accelerator, 
         pipeline: OmniGen2Pipeline, 
-        instruction: str, 
+        prompt: str,
         negative_prompt: str, 
         input_images: List[Image.Image]) -> Image.Image:
     """Run the image generation pipeline with the given parameters."""
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
     results = pipeline(
-        prompt=instruction,
+        prompt=prompt,
         input_images=input_images,
         width=args.width,
         height=args.height,
@@ -302,21 +315,22 @@ def main(args: argparse.Namespace, root_dir: str) -> None:
     # Load pipeline and process inputs
     pipeline = load_pipeline(args, accelerator, weight_dtype)
     input_images = preprocess(args.input_image_path)
+    output_path = args.output or os.path.join(args.output_dir, args.filename)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     # Generate and save image
-    results = run(args, accelerator, pipeline, args.instruction, args.negative_prompt, input_images)
-    os.makedirs(os.path.dirname(args.output_image_path), exist_ok=True)
+    results = run(args, accelerator, pipeline, args.prompt, args.negative_prompt, input_images)
 
     if len(results.images) > 1:
         for i, image in enumerate(results.images):
-            image_name, ext = os.path.splitext(args.output_image_path)
+            image_name, ext = os.path.splitext(output_path)
             image.save(f"{image_name}_{i}{ext}")
 
     vis_images = [to_tensor(image) * 2 - 1 for image in results.images]
     output_image = create_collage(vis_images)
 
-    output_image.save(args.output_image_path)
-    print(f"Image saved to {args.output_image_path}")
+    output_image.save(output_path)
+    print(f"Image saved to {output_path}")
 
 if __name__ == "__main__":
     root_dir = os.path.abspath(os.path.join(__file__, os.path.pardir))

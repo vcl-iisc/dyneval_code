@@ -15,6 +15,8 @@ from autoregressive.models.gpt import GPT_models
 from autoregressive.models.generate import generate
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+DEFAULT_OUT = "outputs"
+
 
 
 def main(args):
@@ -79,12 +81,7 @@ def main(args):
         torch_dtype=precision,
         model_max_length=args.t5_feature_max_len,
     )
-    prompts = [
-        "A portrait photo of a kangaroo wearing an orange hoodie and blue sunglasses standing on the grassin front of the Sydney Opera House holding a sign on the chest that says Welcome Friends!",
-        "A blue Porsche 356 parked in front of a yellow brick wall.",
-        "A photo of an astronaut riding a horse in the forest. There is a river in front of them with water lilies.",
-        "A map of the United States made out of sushi. It is on a table next to a glass of red wine."
-    ]
+    prompts = [args.prompt]
 
     caption_embs, emb_masks = t5_model.get_text_embeddings(prompts)
 
@@ -122,13 +119,19 @@ def main(args):
     decoder_time = time.time() - t2
     print(f"decoder takes about {decoder_time:.2f} seconds.")
 
-    save_image(samples, "sample_{}.png".format(args.gpt_type), nrow=4, normalize=True, value_range=(-1, 1))
-    print(f"image is saved to sample_{args.gpt_type}.png")
+    output = args.output or os.path.join(args.output_dir, args.filename)
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+    save_image(samples, output, nrow=1, normalize=True, value_range=(-1, 1))
+    print(f"image is saved to {output}")
 
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Generate one LlamaGen image from a single prompt.")
+    parser.add_argument("prompt", help="text prompt to generate")
+    parser.add_argument("--output", default=None, help="full output image path")
+    parser.add_argument("--output-dir", default=DEFAULT_OUT, help="directory used with --filename")
+    parser.add_argument("--filename", default="output.png")
     parser.add_argument("--t5-path", type=str, default='pretrained_models/t5-ckpt')
     parser.add_argument("--t5-model-type", type=str, default='flan-t5-xl')
     parser.add_argument("--t5-feature-max-len", type=int, default=120)

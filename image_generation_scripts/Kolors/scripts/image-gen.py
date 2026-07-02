@@ -1,15 +1,11 @@
 
 import argparse
-import csv
 import os
 import sys
-import traceback
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 KOLORS_ROOT = os.path.dirname(SCRIPT_DIR)
-MAP = "DYNEVAL-1K-PROMPTS-MAP.tsv"
-OUT_DIR = os.path.join("DYNEVAL-1K-IMAGES", "Kolors")
-EXT = {".png", ".jpg", ".jpeg", ".webp"}
+DEFAULT_OUT = "outputs"
 
 
 def load_pipe():
@@ -47,82 +43,53 @@ def load_pipe():
     return pipe
 
 
-def generate(pipe, prompt, seed):
+def generate(pipe, prompt, seed, height, width, num_inference_steps, guidance_scale):
     import torch
 
     image = pipe(
         prompt=prompt,
-        height=1024,
-        width=1024,
-        num_inference_steps=50,
-        guidance_scale=5.0,
+        height=height,
+        width=width,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
         num_images_per_prompt=1,
         generator=torch.Generator(pipe.device).manual_seed(seed),
     ).images[0]
     return image
 
 
-def pending_rows():
-    have = set()
-    if os.path.isdir(OUT_DIR):
-        for fn in os.listdir(OUT_DIR):
-            if os.path.splitext(fn.lower())[1] in EXT:
-                have.add(os.path.splitext(fn)[0].zfill(4))
-
-    rows = list(csv.DictReader(open(MAP, encoding="utf-8"), delimiter="\t"))
-    missing = []
-    for r in rows:
-        gid = r["id"].zfill(4)
-        if gid not in have:
-            missing.append((gid, r["benchmark"], r["prompt"]))
-    return missing
-
-
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Generate one Kolors image from a single prompt.")
+    ap.add_argument("prompt", help="text prompt to generate")
+    ap.add_argument("--output", default=None, help="full output image path")
+    ap.add_argument("--output_dir", default=DEFAULT_OUT, help="directory used with --filename")
+    ap.add_argument("--filename", default="output.png")
     ap.add_argument("--seed", type=int, default=66,
                     help="same default as Kolors scripts/sample.py")
-    ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--height", type=int, default=1024)
+    ap.add_argument("--width", type=int, default=1024)
+    ap.add_argument("--num_inference_steps", type=int, default=50)
+    ap.add_argument("--guidance_scale", type=float, default=5.0)
     args = ap.parse_args()
 
-    os.makedirs(OUT_DIR, exist_ok=True)
-    todo = pending_rows()
-    print(f"[Kolors] missing={len(todo)}  -> {OUT_DIR}")
-    if args.limit:
-        todo = todo[: args.limit]
-        print(f"  limited to {len(todo)} this run")
-    if not todo:
-        print("Nothing to do.")
-        return
-    if args.dry_run:
-        for gid, bench, prompt in todo[:20]:
-            print(f"  {gid}  [{bench}]  {prompt[:90]}")
-        if len(todo) > 20:
-            print(f"  ... and {len(todo) - 20} more")
-        return
+    output = args.output or os.path.join(args.output_dir, args.filename)
+    output = os.path.abspath(output)
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
 
     print("Loading Kolors pipeline (once) ...")
     pipe = load_pipe()
 
-    fail_log = "generate_fail_Kolors.log"
-    ok = bad = 0
-    for i, (gid, bench, prompt) in enumerate(todo, 1):
-        dst = os.path.join(OUT_DIR, f"{gid}.png")
-        try:
-            generate(pipe, prompt, args.seed).save(dst)
-            ok += 1
-            print(f"[{i}/{len(todo)}] {gid} OK  [{bench}]")
-        except Exception as e:
-            bad += 1
-            with open(fail_log, "a", encoding="utf-8") as lf:
-                lf.write(f"{gid}\t{bench}\t{prompt}\t{e}\n")
-                lf.write(traceback.format_exc() + "\n")
-            print(f"[{i}/{len(todo)}] {gid} FAILED: {e}")
-
-    print(f"\nDone Kolors: generated={ok}  failed={bad}  -> {OUT_DIR}")
-    if bad:
-        print(f"Failures logged to {fail_log}")
+    image = generate(
+        pipe,
+        args.prompt,
+        args.seed,
+        args.height,
+        args.width,
+        args.num_inference_steps,
+        args.guidance_scale,
+    )
+    image.save(output)
+    print(f"Saved {output}")
 
 
 if __name__ == "__main__":

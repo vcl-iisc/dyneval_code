@@ -272,7 +272,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         save_directory: Union[str, os.PathLike],
         is_main_process: bool = True,
         save_function: Optional[Callable] = None,
-        safe_serialization: bool = True,
+        safe_serialization: bool = False,
         variant: Optional[str] = None,
         max_shard_size: Union[int, str] = "10GB",
         push_to_hub: bool = False,
@@ -649,7 +649,6 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         )
         if index_file is not None and index_file.is_file():
             is_sharded = True
-
         if is_sharded and from_flax:
             raise ValueError("Loading of sharded checkpoints is not supported when `from_flax=True`.")
 
@@ -688,7 +687,6 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder or "",
                 )
-
             elif use_safetensors and not is_sharded:
                 try:
                     model_file = _get_model_file(
@@ -784,7 +782,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
                             offload_state_dict=offload_state_dict,
                             dtype=torch_dtype,
                             force_hooks=force_hook,
-                            strict=True,
+                            # strict=True,
                         )
                     except AttributeError as e:
                         # When using accelerate loading, we do not have the ability to load the state

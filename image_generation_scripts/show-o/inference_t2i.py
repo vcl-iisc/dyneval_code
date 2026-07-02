@@ -1,474 +1,360 @@
-# coding=utf-8
-# Copyright 2024 NUS Show Lab.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-import json
 import os
 import sys
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 os.environ.setdefault("TRITON_CACHE_DIR", "/tmp/triton-cache")
 os.environ.setdefault("XDG_CACHE_HOME", "/tmp/xdg-cache")
+
 from PIL import Image
-from tqdm import tqdm
-import numpy as np
 import torch
-import wandb
-from models import Showo, MAGVITv2, get_mask_chedule
-from training.prompting_utils import UniversalPrompting, create_attention_mask_predict_next
-from training.utils import get_config, flatten_omega_conf, image_transform
-from transformers import AutoTokenizer
-import torch.nn.functional as F
+from tqdm import tqdm
+from omegaconf import OmegaConf
+from utils import get_config, denorm, get_hyper_params, path_to_llm_name, load_state_dict
 
-DEFAULT_DYNEVAL_PROMPTS_FILE = (
-    "/mnt/18_TB/shyam/dyneval_project/"
-    "DYNEVAL-UPDATED-1K-EXPERIMENT/prompts/DYNEVAL-1K-PROMPTS.json"
-)
-DEFAULT_DYNEVAL_OUTPUT_DIR = (
-    "/mnt/18_TB/shyam/dyneval_project/DYNEVAL-1K-IMAGES/showo-fixed"
-)
-DEFAULT_SHOWO_MODEL_PATH = "/mnt/18_TB/shyam/dyneval_project/show-o/showo-model"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SHOWO_DIR = os.path.dirname(SCRIPT_DIR)
+PROJECT_ROOT = "/mnt/18_TB/shyam/dyneval_project"
+DEFAULT_VAE_PATH = os.path.join(SCRIPT_DIR, "Wan2.1_VAE.pth")
+DEFAULT_OUT = "outputs"
 
 
-def get_vq_model_class(model_type):
-    if model_type == "magvitv2":
-        return MAGVITv2
-    else:
-        raise ValueError(f"model_type {model_type} not supported.")
+def _find_existing_file(path):
+    if not path:
+        return None
+    if os.path.isfile(path):
+        return os.path.abspath(path)
+    for root in (SCRIPT_DIR, SHOWO_DIR, PROJECT_ROOT, os.getcwd()):
+        resolved = os.path.join(root, path)
+        if os.path.isfile(resolved):
+            return os.path.abspath(resolved)
+    return None
 
 
-def load_t2i_prompt_items(prompts_file):
-    with open(prompts_file, "r") as f:
-        if prompts_file.endswith(".json"):
-            data = json.load(f)
-            prompt_items = data["prompts"] if isinstance(data, dict) and "prompts" in data else data
-            return [
-                {
-                    "prompt": item["prompt"],
-                    "filename": item.get("filename", f"{idx + 1:04d}.png"),
-                }
-                for idx, item in enumerate(prompt_items)
-            ]
+def resolve_vae_model_path(config):
+    configured = config.get("vae_model_path")
+    if configured is None:
+        configured = OmegaConf.select(config, "model.vae_model.pretrained_model_path")
 
-        prompts = [line.strip() for line in f if line.strip()]
-        return [
-            {"prompt": prompt, "filename": f"{idx + 1:04d}.png"}
-            for idx, prompt in enumerate(prompts)
-        ]
+    if configured and os.path.isabs(configured) and os.path.isfile(configured):
+        return configured
 
+    for path in (DEFAULT_VAE_PATH, os.path.join(SHOWO_DIR, "Wan2.1_VAE.pth")):
+        if os.path.isfile(path):
+            return os.path.abspath(path)
 
-def images_to_pil(images):
-    images = torch.clamp((images + 1.0) / 2.0, min=0.0, max=1.0)
-    images *= 255.0
-    images = images.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
-    return [Image.fromarray(image) for image in images]
+    resolved = _find_existing_file(configured)
+    if resolved:
+        return resolved
 
-
-def is_showo2_checkpoint(model_path):
-    config_path = os.path.join(model_path, "config.json")
-    if not os.path.isfile(config_path):
-        return False
-    with open(config_path, "r") as f:
-        model_config = json.load(f)
-    return str(model_config.get("_class_name", "")).startswith("Showo2")
-
-
-def dispatch_to_showo2(config):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    showo2_script = os.path.join(script_dir, "show-o2", "inference_t2i.py")
-    showo2_config = config.get(
-        "showo2_config",
-        os.path.join(script_dir, "show-o2", "configs", "showo2_1.5b_demo_432x432.yaml"),
+    raise FileNotFoundError(
+        "Wan VAE weights were not found. Download with:\n"
+        "  cd /mnt/18_TB/shyam/dyneval_project/show-o/show-o2\n"
+        "  wget https://huggingface.co/Wan-AI/Wan2.1-T2V-14B/resolve/main/Wan2.1_VAE.pth\n"
+        f"Expected file at {DEFAULT_VAE_PATH}"
     )
-    prompts_file = config.get("validation_prompts_file", DEFAULT_DYNEVAL_PROMPTS_FILE)
-    output_dir = config.get("output_dir", DEFAULT_DYNEVAL_OUTPUT_DIR)
-    training_config = config.get("training", {})
-    batch_size = config.get("batch_size", training_config.get("batch_size", 1))
-    num_inference_steps = config.get("num_inference_steps", config.get("generation_timesteps", 50))
-
-    args = [
-        sys.executable,
-        showo2_script,
-        f"config={showo2_config}",
-        f"model.showo.pretrained_model_path={config.model.showo.pretrained_model_path}",
-        f"validation_prompts_file={prompts_file}",
-        f"output_dir={output_dir}",
-        f"batch_size={batch_size}",
-        f"guidance_scale={config.guidance_scale}",
-        f"num_inference_steps={num_inference_steps}",
-        f"log_wandb={str(config.get('log_wandb', False)).lower()}",
-    ]
-    if config.get("vae_model_path", None) is not None:
-        args.append(f"model.vae_model.pretrained_model_path={config.vae_model_path}")
-    else:
-        for candidate in (
-            os.path.join(script_dir, "show-o2", "Wan2.1_VAE.pth"),
-            os.path.join(script_dir, "Wan2.1_VAE.pth"),
-        ):
-            if os.path.isfile(candidate):
-                args.append(f"model.vae_model.pretrained_model_path={candidate}")
-                break
-        else:
-            vae_model_path = config.model.vae_model.get("pretrained_model_path", None)
-            if vae_model_path is not None:
-                args.append(f"model.vae_model.pretrained_model_path={vae_model_path}")
-    os.chdir(os.path.join(script_dir, "show-o2"))
-    os.execv(sys.executable, args)
 
 
-if __name__ == '__main__':
+def sync_config_with_model(config, model):
+    """Keep YAML resolution settings for HQ checkpoints."""
+    ckpt_lh = int(model.config.image_latent_height)
+    ckpt_lw = int(model.config.image_latent_width)
+    yaml_lh = int(OmegaConf.select(config, "model.showo.image_latent_height"))
+    yaml_lw = int(OmegaConf.select(config, "model.showo.image_latent_width"))
+    if (yaml_lh, yaml_lw) != (ckpt_lh, ckpt_lw):
+        print(
+            f"[Show-O] HQ/runtime resolution {yaml_lh}x{yaml_lw} "
+            f"(checkpoint native {ckpt_lh}x{ckpt_lw}; using interpolated pos embeds)"
+        )
+        config.dataset.preprocessing.latent_height = yaml_lh
+        config.dataset.preprocessing.latent_width = yaml_lw
+        config.dataset.preprocessing.num_t2i_image_tokens = yaml_lh * yaml_lw
+        return
 
-    config = get_config()
+    config.model.showo.image_latent_height = ckpt_lh
+    config.model.showo.image_latent_width = ckpt_lw
+    config.dataset.preprocessing.latent_height = ckpt_lh
+    config.dataset.preprocessing.latent_width = ckpt_lw
+    config.dataset.preprocessing.num_t2i_image_tokens = ckpt_lh * ckpt_lw
+    patch_size = int(config.model.showo.patch_size)
+    config.dataset.preprocessing.resolution = ckpt_lh * patch_size * 8
 
-    if config.get("mode", None) is None:
-        config.mode = "t2i"
-    training_config = config.get("training", {})
+
+def prepare_config(config):
+    if config.get("generation_timesteps", None) is not None:
+        config.num_inference_steps = config.generation_timesteps
+    if config.get("batch_size", None) is None:
+        config.batch_size = 1
     if config.get("guidance_scale", None) is None:
-        config.guidance_scale = training_config.get("guidance_scale", 5.0)
-    if config.get("generation_timesteps", None) is None:
-        config.generation_timesteps = training_config.get("generation_timesteps", 50)
+        config.guidance_scale = config.transport.get("guidance_scale", 7.5)
+    if config.get("num_inference_steps", None) is None:
+        config.num_inference_steps = config.transport.get("num_inference_steps", 50)
 
-    if config.get("showo_model_path", None) is not None:
-        config.model.showo.pretrained_model_path = config.showo_model_path
-    elif os.path.isdir(DEFAULT_SHOWO_MODEL_PATH):
-        config.model.showo.pretrained_model_path = DEFAULT_SHOWO_MODEL_PATH
+    output_dir = config.get("output_dir", DEFAULT_OUT)
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.abspath(output_dir)
+    config.output_dir = output_dir
 
-    if is_showo2_checkpoint(config.model.showo.pretrained_model_path):
-        dispatch_to_showo2(config)
+    vae_model_path = resolve_vae_model_path(config)
+    config.model.vae_model.pretrained_model_path = vae_model_path
+    return config
 
-    log_wandb = config.get("log_wandb", config.mode != "t2i")
-    if log_wandb:
-        resume_wandb_run = config.wandb.resume
-        run_id = config.wandb.get("run_id", None)
-        if run_id is None:
-            resume_wandb_run = False
-            run_id = wandb.util.generate_id()
-            config.wandb.run_id = run_id
 
-        wandb_config = {k: v for k, v in flatten_omega_conf(config, resolve=True)}
+def load_models(config, device):
+    from models import Showo2Qwen2_5, WanVAE
+    from models.misc import get_text_tokenizer, prepare_gen_input
+    from models import omni_attn_mask_naive
+    from transport import Sampler, create_transport
 
-        wandb.init(
-            project="demo",
-            name=config.experiment.name + '_t2i' + f'_{config.mode}',
-            config=wandb_config,
+    if config.model.weight_type == "bfloat16":
+        weight_type = torch.bfloat16
+    elif config.model.weight_type == "float32":
+        weight_type = torch.float32
+    else:
+        raise NotImplementedError
+
+    vae_model = WanVAE(
+        vae_pth=config.model.vae_model.pretrained_model_path,
+        dtype=weight_type,
+        device=device,
+    )
+
+    text_tokenizer, showo_token_ids = get_text_tokenizer(
+        config.model.showo.llm_model_path,
+        add_showo_tokens=True,
+        return_showo_token_ids=True,
+        llm_name=path_to_llm_name[config.model.showo.llm_model_path],
+    )
+    config.model.showo.llm_vocab_size = len(text_tokenizer)
+
+    if config.model.showo.load_from_showo:
+        model = Showo2Qwen2_5.from_pretrained(
+            config.model.showo.pretrained_model_path,
+            use_safetensors=False,
+            low_cpu_mem_usage=False,
+        ).to(device)
+    else:
+        model = Showo2Qwen2_5(**config.model.showo).to(device)
+        state_dict = load_state_dict(config.model_path)
+        model.load_state_dict(state_dict)
+
+    model.to(weight_type)
+    model.eval()
+    sync_config_with_model(config, model)
+
+    if config.model.showo.add_time_embeds:
+        config.dataset.preprocessing.num_t2i_image_tokens += 1
+        config.dataset.preprocessing.num_mmu_image_tokens += 1
+        config.dataset.preprocessing.num_video_tokens += 1
+
+    num_t2i_image_tokens, num_mmu_image_tokens, num_video_tokens, max_seq_len, max_text_len, image_latent_dim, patch_size, latent_width, \
+    latent_height, pad_id, bos_id, eos_id, boi_id, eoi_id, bov_id, eov_id, img_pad_id, vid_pad_id, _ = get_hyper_params(
+        config, text_tokenizer, showo_token_ids
+    )
+
+    guidance_scale = config.guidance_scale
+    config.transport.num_inference_steps = config.num_inference_steps
+
+    transport = create_transport(
+        path_type=config.transport.path_type,
+        prediction=config.transport.prediction,
+        loss_weight=config.transport.loss_weight,
+        train_eps=config.transport.train_eps,
+        sample_eps=config.transport.sample_eps,
+        snr_type=config.transport.snr_type,
+        do_shift=config.transport.do_shift,
+        seq_len=num_t2i_image_tokens,
+    )
+    sampler = Sampler(transport)
+
+    return {
+        "model": model,
+        "vae_model": vae_model,
+        "text_tokenizer": text_tokenizer,
+        "showo_token_ids": showo_token_ids,
+        "weight_type": weight_type,
+        "num_t2i_image_tokens": num_t2i_image_tokens,
+        "max_seq_len": max_seq_len,
+        "max_text_len": max_text_len,
+        "image_latent_dim": image_latent_dim,
+        "patch_size": patch_size,
+        "latent_width": latent_width,
+        "latent_height": latent_height,
+        "pad_id": pad_id,
+        "bos_id": bos_id,
+        "eos_id": eos_id,
+        "boi_id": boi_id,
+        "eoi_id": eoi_id,
+        "img_pad_id": img_pad_id,
+        "guidance_scale": guidance_scale,
+        "sampler": sampler,
+        "prepare_gen_input": prepare_gen_input,
+        "omni_attn_mask_naive": omni_attn_mask_naive,
+    }
+
+
+def generate_single_image(config, runtime, prompt, device):
+    from models.misc import prepare_gen_input
+
+    model = runtime["model"]
+    vae_model = runtime["vae_model"]
+    text_tokenizer = runtime["text_tokenizer"]
+    weight_type = runtime["weight_type"]
+
+    batch_text_tokens, batch_text_tokens_null, batch_modality_positions, batch_modality_positions_null = \
+        prepare_gen_input(
+            [prompt],
+            text_tokenizer,
+            runtime["num_t2i_image_tokens"],
+            runtime["bos_id"],
+            runtime["eos_id"],
+            runtime["boi_id"],
+            runtime["eoi_id"],
+            runtime["pad_id"],
+            runtime["img_pad_id"],
+            runtime["max_text_len"],
+            device,
         )
 
+    z = torch.randn(
+        (
+            1,
+            runtime["image_latent_dim"],
+            runtime["latent_height"] * runtime["patch_size"],
+            runtime["latent_width"] * runtime["patch_size"],
+        ),
+        device=device,
+        dtype=torch.bfloat16,
+    )
+
+    guidance_scale = runtime["guidance_scale"]
+    if guidance_scale > 0:
+        z = torch.cat([z, z], dim=0)
+        text_tokens = torch.cat([batch_text_tokens, batch_text_tokens_null], dim=0)
+        modality_positions = torch.cat(
+            [batch_modality_positions, batch_modality_positions_null], dim=0
+        )
+    else:
+        text_tokens = batch_text_tokens
+        modality_positions = batch_modality_positions
+
+    block_mask = runtime["omni_attn_mask_naive"](
+        text_tokens.size(0),
+        runtime["max_seq_len"],
+        modality_positions,
+        device,
+    ).to(weight_type)
+
+    model_kwargs = dict(
+        text_tokens=text_tokens,
+        attention_mask=block_mask,
+        modality_positions=modality_positions,
+        output_hidden_states=True,
+        max_seq_len=runtime["max_seq_len"],
+        guidance_scale=guidance_scale,
+    )
+
+    sample_fn = runtime["sampler"].sample_ode(
+        sampling_method=config.transport.sampling_method,
+        num_steps=config.transport.num_inference_steps,
+        atol=config.transport.atol,
+        rtol=config.transport.rtol,
+        reverse=config.transport.reverse,
+        time_shifting_factor=config.transport.time_shifting_factor,
+    )
+    samples = sample_fn(z, model.t2i_generate, **model_kwargs)[-1]
+    if guidance_scale > 0:
+        samples = torch.chunk(samples, 2)[0]
+
+    samples = samples.unsqueeze(2)
+    images = vae_model.batch_decode(samples).squeeze(2)
+    images = denorm(images)
+    return Image.fromarray(images[0])
+
+
+def normalize_cli_args(argv):
+    """Support one positional prompt while preserving OmegaConf key=value overrides."""
+    prompt = None
+    normalized = []
+    value_flags = {
+        "--config": "config",
+        "--prompt": "prompt",
+        "--output": "output",
+        "--output-dir": "output_dir",
+        "--output_dir": "output_dir",
+        "--filename": "filename",
+    }
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in value_flags:
+            if i + 1 >= len(argv):
+                raise SystemExit(f"{arg} requires a value")
+            key = value_flags[arg]
+            value = argv[i + 1]
+            if key == "prompt":
+                prompt = value
+            else:
+                normalized.append(f"{key}={value}")
+            i += 2
+            continue
+
+        matched_flag = False
+        for flag, key in value_flags.items():
+            prefix = f"{flag}="
+            if arg.startswith(prefix):
+                value = arg[len(prefix):]
+                if key == "prompt":
+                    prompt = value
+                else:
+                    normalized.append(f"{key}={value}")
+                matched_flag = True
+                break
+        if matched_flag:
+            i += 1
+            continue
+
+        if arg.startswith("--"):
+            normalized.append(arg[2:])
+        elif "=" in arg:
+            normalized.append(arg)
+        elif prompt is None:
+            prompt = arg
+        else:
+            raise SystemExit(f"Unexpected extra positional argument: {arg}")
+        i += 1
+
+    return prompt, normalized
+
+
+if __name__ == "__main__":
+    prompt, omega_args = normalize_cli_args(sys.argv[1:])
+    sys.argv = [sys.argv[0]] + omega_args
+    config = prepare_config(get_config())
+    if prompt is None:
+        prompt = config.get("prompt")
+    if not prompt:
+        raise SystemExit(
+            'Missing prompt. Example: python inference_t2i.py "a red chair" config=configs/example.yaml'
+        )
+
+    if config.get("seed") is not None:
+        torch.manual_seed(int(config.seed))
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(int(config.seed))
+
+    output = config.get("output")
+    if not output:
+        output = os.path.join(config.output_dir, config.get("filename", "output.png"))
+    if not os.path.isabs(output):
+        output = os.path.abspath(output)
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tokenizer = AutoTokenizer.from_pretrained(config.model.showo.llm_model_path, padding_side="left")
-
-    uni_prompting = UniversalPrompting(tokenizer, max_text_len=config.dataset.preprocessing.max_seq_length,
-                                       special_tokens=("<|soi|>", "<|eoi|>", "<|sov|>", "<|eov|>", "<|t2i|>", "<|mmu|>", "<|t2v|>", "<|v2v|>", "<|lvg|>"),
-                                       ignore_id=-100, cond_dropout_prob=config.training.cond_dropout_prob)
-
-    vq_model = get_vq_model_class(config.model.vq_model.type)
-    vq_model = vq_model.from_pretrained(config.model.vq_model.vq_model_name).to(device)
-    vq_model.requires_grad_(False)
-    vq_model.eval()
-
-    model = Showo.from_pretrained(config.model.showo.pretrained_model_path).to(device)
-    model.eval()
-
-    mask_token_id = model.config.mask_token_id
-
-    # load from users passed arguments
-    if config.get("validation_prompts_file", None) is not None:
-        config.dataset.params.validation_prompts_file = config.validation_prompts_file
-    elif config.mode == 't2i':
-        config.dataset.params.validation_prompts_file = DEFAULT_DYNEVAL_PROMPTS_FILE
-    if config.get("batch_size", None) is not None:
-        config.training.batch_size = config.batch_size
-    if config.get("guidance_scale", None) is not None:
-        config.training.guidance_scale = config.guidance_scale
-    if config.get("generation_timesteps", None) is not None:
-        config.training.generation_timesteps = config.generation_timesteps
-    # load from users passed arguments
-
-    if config.mode == 'inpainting':
-
-        prompt = [config.prompt] * config.batch_size
-        inpainting_image = Image.open(config.image_path).convert("RGB")
-        inpainting_mask = Image.open(config.inpainting_mask_path).convert("L")
-
-        inpainting_image = image_transform(inpainting_image, resolution=config.dataset.params.resolution).to(device)
-        inpainting_mask = image_transform(inpainting_mask, resolution=config.dataset.params.resolution, normalize=False)
-
-        # record original image and inpainting mask
-        images = torch.clamp(
-            (torch.stack([inpainting_image, inpainting_mask.repeat(3, 1, 1).to(device)], dim=0) + 1.0) / 2.0,
-            min=0.0, max=1.0)
-        images *= 255.0
-        images = images.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
-        pil_images = [Image.fromarray(image) for image in images]
-
-        labels = ['original image', 'inpainting mask']
-        wandb_images = [wandb.Image(image, caption=labels[i]) for i, image in enumerate(pil_images)]
-
-        inpainting_image = inpainting_image.unsqueeze(0).repeat(config.training.batch_size, 1, 1, 1)
-
-        inpainting_mask = inpainting_mask.unsqueeze(0).to(device)
-        inpainting_mask = F.interpolate(inpainting_mask, size=config.dataset.params.resolution // 16, mode='bicubic')
-        inpainting_mask = inpainting_mask.repeat(config.training.batch_size, 1, 1, 1)
-
-        inpainting_mask[inpainting_mask < 0.5] = 0
-        inpainting_mask[inpainting_mask >= 0.5] = 1
-
-        inpainting_mask = inpainting_mask.reshape(config.training.batch_size, -1)
-        inpainting_mask = inpainting_mask.to(torch.bool)
-
-        inpainting_image_tokens = vq_model.get_code(inpainting_image) + len(uni_prompting.text_tokenizer)
-        inpainting_image_tokens[inpainting_mask] = mask_token_id
-
-        input_ids, _ = uni_prompting((prompt, inpainting_image_tokens), 't2i_gen')
-
-        if config.training.guidance_scale > 0:
-            uncond_input_ids, _ = uni_prompting(([''] * len(prompt), inpainting_image_tokens), 't2i_gen')
-            attention_mask = create_attention_mask_predict_next(torch.cat([input_ids, uncond_input_ids], dim=0),
-                                                                pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                rm_pad_in_image=True)
-        else:
-            attention_mask = create_attention_mask_predict_next(input_ids,
-                                                                pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                rm_pad_in_image=True)
-            uncond_input_ids = None
-
-        if config.get("mask_schedule", None) is not None:
-            schedule = config.mask_schedule.schedule
-            args = config.mask_schedule.get("params", {})
-            mask_schedule = get_mask_chedule(schedule, **args)
-        else:
-            mask_schedule = get_mask_chedule(config.training.get("mask_schedule", "cosine"))
-
-        with torch.no_grad():
-            gen_token_ids = model.t2i_generate(
-                input_ids=input_ids,
-                uncond_input_ids=uncond_input_ids,
-                attention_mask=attention_mask,
-                guidance_scale=config.training.guidance_scale,
-                temperature=config.training.get("generation_temperature", 1.0),
-                timesteps=config.training.generation_timesteps,
-                noise_schedule=mask_schedule,
-                noise_type=config.training.get("noise_type", "mask"),
-                seq_len=config.model.showo.num_vq_tokens,
-                uni_prompting=uni_prompting,
-                config=config,
-            )
-
-        gen_token_ids = torch.clamp(gen_token_ids, max=config.model.showo.codebook_size - 1, min=0)
-        images = vq_model.decode_code(gen_token_ids)
-
-        images = torch.clamp((images + 1.0) / 2.0, min=0.0, max=1.0)
-        images *= 255.0
-        images = images.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
-        pil_images = [Image.fromarray(image) for image in images]
-        # import ipdb
-        # ipdb.set_trace()
-        wandb_images.extend([wandb.Image(image, caption=prompt[i]) for i, image in enumerate(pil_images)])
-        wandb.log({"generated_images": wandb_images}, step=0)
-
-    elif config.mode == 'extrapolation':
-
-        prompt = [p for p in config.prompt.split(" *** ") if len(p) != 0]
-        extra_direction = [d for d in config.extra_direction.split(" *** ") if len(d) != 0]
-        print(prompt, extra_direction)
-        W = config.dataset.params.resolution // 16
-        for id, (prt, direction) in enumerate(zip(prompt, extra_direction)):
-            prt = [prt] * config.training.batch_size
-            if id == 0:
-                extrapolation_image = Image.open(config.image_path).convert("RGB")
-                extrapolation_image = image_transform(extrapolation_image,
-                                                      resolution=config.dataset.params.resolution).to(device)
-
-                B, _, _ = extrapolation_image.shape
-                extrapolation_image = extrapolation_image.unsqueeze(0)
-                extrapolation_image_tokens = vq_model.get_code(extrapolation_image) + len(uni_prompting.text_tokenizer)
-                extrapolation_image_tokens = extrapolation_image_tokens.reshape(1,
-                                                                                config.dataset.params.resolution // 16,
-                                                                                config.dataset.params.resolution // 16)
-                extrapolation_image_tokens = extrapolation_image_tokens.repeat(config.training.batch_size, 1, 1)
-            else:
-
-
-                extrapolation_image_tokens = gen_token_ids + len(uni_prompting.text_tokenizer)
-
-            image_left_part = extrapolation_image_tokens[:, :, :-(W//2-config.offset)] - len(uni_prompting.text_tokenizer)
-            image_right_part = extrapolation_image_tokens[:, :, W//2-config.offset:] - len(uni_prompting.text_tokenizer)
-            image_up_part = extrapolation_image_tokens[:, :-(W//2-config.offset), :] - len(uni_prompting.text_tokenizer)
-            image_down_part = extrapolation_image_tokens[:, W//2-config.offset:, :] - len(uni_prompting.text_tokenizer)
-
-            if direction in ['left', 'right']:
-                extrapolation_mask = torch.zeros((config.training.batch_size,
-                                                  config.dataset.params.resolution // 16,
-                                                  config.dataset.params.resolution // 16 // 2 + config.offset),
-                                                 dtype=torch.int64, device=device) + mask_token_id
-            else:
-                extrapolation_mask = torch.zeros((config.training.batch_size,
-                                                  config.dataset.params.resolution // 16 // 2 + config.offset,
-                                                  config.dataset.params.resolution // 16),
-                                                 dtype=torch.int64, device=device) + mask_token_id
-
-            if direction == 'left':
-                extrapolation_image_tokens = torch.cat(
-                    [extrapolation_mask, extrapolation_image_tokens[:, :, :W//2-config.offset]], dim=-1)
-            elif direction == 'right':
-                extrapolation_image_tokens = torch.cat(
-                    [extrapolation_image_tokens[:, :, -(W//2-config.offset):], extrapolation_mask], dim=-1)
-            elif direction == 'up':
-                extrapolation_image_tokens = torch.cat(
-                    [extrapolation_mask, extrapolation_image_tokens[:, :W // 2 - config.offset, :]], dim=-2)
-            else:
-                extrapolation_image_tokens = torch.cat(
-                    [extrapolation_image_tokens[:, -(W // 2 - config.offset):, :], extrapolation_mask], dim=-2)
-
-            extrapolation_image_tokens = extrapolation_image_tokens.reshape(config.training.batch_size, -1)
-
-            input_ids, _ = uni_prompting((prt, extrapolation_image_tokens), 't2i_gen')
-
-            if config.training.guidance_scale > 0:
-                uncond_input_ids, _ = uni_prompting(([''] * len(prt), extrapolation_image_tokens), 't2i_gen')
-                attention_mask = create_attention_mask_predict_next(torch.cat([input_ids, uncond_input_ids], dim=0),
-                                                                    pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                    soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                    eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                    rm_pad_in_image=True)
-            else:
-                attention_mask = create_attention_mask_predict_next(input_ids,
-                                                                    pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                    soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                    eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                    rm_pad_in_image=True)
-                uncond_input_ids = None
-
-            if config.get("mask_schedule", None) is not None:
-                schedule = config.mask_schedule.schedule
-                args = config.mask_schedule.get("params", {})
-                mask_schedule = get_mask_chedule(schedule, **args)
-            else:
-                mask_schedule = get_mask_chedule(config.training.get("mask_schedule", "cosine"))
-
-            with torch.no_grad():
-                gen_token_ids = model.t2i_generate(
-                    input_ids=input_ids,
-                    uncond_input_ids=uncond_input_ids,
-                    attention_mask=attention_mask,
-                    guidance_scale=config.training.guidance_scale,
-                    temperature=config.training.get("generation_temperature", 1.0),
-                    timesteps=config.training.generation_timesteps,
-                    noise_schedule=mask_schedule,
-                    noise_type=config.training.get("noise_type", "mask"),
-                    seq_len=config.model.showo.num_vq_tokens,
-                    uni_prompting=uni_prompting,
-                    config=config,
-                )
-
-            gen_token_ids = torch.clamp(gen_token_ids, max=config.model.showo.codebook_size - 1, min=0)
-            gen_token_ids = gen_token_ids.reshape(config.training.batch_size,
-                                                  config.dataset.params.resolution // 16,
-                                                  config.dataset.params.resolution // 16)
-            if direction == 'left':
-                gen_token_ids = torch.cat([gen_token_ids, image_right_part], dim=-1)
-            elif direction == 'right':
-                gen_token_ids = torch.cat([image_left_part, gen_token_ids], dim=-1)
-            elif direction == 'up':
-                gen_token_ids = torch.cat([gen_token_ids, image_down_part], dim=-2)
-            else:
-                gen_token_ids = torch.cat([image_left_part, gen_token_ids], dim=-2)
-
-        _, h, w = gen_token_ids.shape
-        gen_token_ids = gen_token_ids.reshape(config.training.batch_size, -1)
-        images = vq_model.decode_code(gen_token_ids, shape=(h, w))
-
-        images = torch.clamp((images + 1.0) / 2.0, min=0.0, max=1.0)
-        images *= 255.0
-        images = images.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
-        pil_images = [Image.fromarray(image) for image in images]
-
-        wandb_images = [wandb.Image(image, caption=' '.join(prompt)) for i, image in enumerate(pil_images)]
-        wandb.log({"generated_images": wandb_images}, step=0)
-
-    elif config.mode == 't2i':
-        prompt_items = load_t2i_prompt_items(config.dataset.params.validation_prompts_file)
-        output_dir = config.get("output_dir", DEFAULT_DYNEVAL_OUTPUT_DIR)
-        skip_existing = config.get("skip_existing", True)
-        os.makedirs(output_dir, exist_ok=True)
-
-        if skip_existing:
-            prompt_items = [
-                item for item in prompt_items
-                if not os.path.exists(os.path.join(output_dir, item["filename"]))
-            ]
-
-        print(f"Generating {len(prompt_items)} images into {output_dir}")
-
-        for step in tqdm(range(0, len(prompt_items), config.training.batch_size)):
-            batch_items = prompt_items[step:step + config.training.batch_size]
-            prompts = [item["prompt"] for item in batch_items]
-
-            image_tokens = torch.ones((len(prompts), config.model.showo.num_vq_tokens),
-                                      dtype=torch.long, device=device) * mask_token_id
-
-            input_ids, _ = uni_prompting((prompts, image_tokens), 't2i_gen')
-
-            if config.training.guidance_scale > 0:
-                uncond_input_ids, _ = uni_prompting(([''] * len(prompts), image_tokens), 't2i_gen')
-                attention_mask = create_attention_mask_predict_next(torch.cat([input_ids, uncond_input_ids], dim=0),
-                                                                    pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                    soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                    eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                    rm_pad_in_image=True)
-            else:
-                attention_mask = create_attention_mask_predict_next(input_ids,
-                                                                    pad_id=int(uni_prompting.sptids_dict['<|pad|>']),
-                                                                    soi_id=int(uni_prompting.sptids_dict['<|soi|>']),
-                                                                    eoi_id=int(uni_prompting.sptids_dict['<|eoi|>']),
-                                                                    rm_pad_in_image=True)
-                uncond_input_ids = None
-
-            if config.get("mask_schedule", None) is not None:
-                schedule = config.mask_schedule.schedule
-                args = config.mask_schedule.get("params", {})
-                mask_schedule = get_mask_chedule(schedule, **args)
-            else:
-                mask_schedule = get_mask_chedule(config.training.get("mask_schedule", "cosine"))
-
-            with torch.no_grad():
-                gen_token_ids = model.t2i_generate(
-                    input_ids=input_ids,
-                    uncond_input_ids=uncond_input_ids,
-                    attention_mask=attention_mask,
-                    guidance_scale=config.training.guidance_scale,
-                    temperature=config.training.get("generation_temperature", 1.0),
-                    timesteps=config.training.generation_timesteps,
-                    noise_schedule=mask_schedule,
-                    noise_type=config.training.get("noise_type", "mask"),
-                    seq_len=config.model.showo.num_vq_tokens,
-                    uni_prompting=uni_prompting,
-                    config=config,
-                )
-
-            gen_token_ids = torch.clamp(gen_token_ids, max=config.model.showo.codebook_size - 1, min=0)
-            images = vq_model.decode_code(gen_token_ids)
-            pil_images = images_to_pil(images)
-
-            for item, image in zip(batch_items, pil_images):
-                output_path = os.path.join(output_dir, item["filename"])
-                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                image.save(output_path)
-
-            if log_wandb:
-                wandb_images = [wandb.Image(image, caption=prompts[i]) for i, image in enumerate(pil_images)]
-                wandb.log({"generated_images": wandb_images}, step=step)
+    print(f"[Show-O] output: {output}")
+    print(f"[Show-O] loading models on {device} ...")
+    runtime = load_models(config, device)
+    image = generate_single_image(config, runtime, prompt, device)
+    image.save(output)
+    print(f"Saved {output}")

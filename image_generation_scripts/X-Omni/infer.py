@@ -1,29 +1,4 @@
-#!/usr/bin/env python3
-"""Generate missing X-Omni images for the DYNEVAL-1K set.
 
-Reads X-Omni-MISSING-PROMPTS.json (405 EvalMuse prompts; 595/1000 exist).
-Already have: 129 GenEval + 466 DPG-Bench. Missing: 405 EvalMuse.
-
-Saves:
-    <output_dir>/<gid:04d>.png   e.g. 0026.png
-
-Copy to main machine:
-    DYNEVAL-1K-IMAGES/X-Omni/
-
-Usage (from DYNEVAL project root; paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/X-Omni/infer.py --dry-run
-    python dyneval_code/generator_scripts/X-Omni/infer.py --limit 5
-    python dyneval_code/generator_scripts/X-Omni/infer.py --gpus 0,1,2,3
-
-Remote server:
-    python dyneval_code/generator_scripts/X-Omni/infer.py \\
-        --batch_json X-Omni-MISSING-PROMPTS.json \\
-        --output_dir ./xomni_outputs \\
-        --model_name_or_path ./X-Omni \\
-        --flux_model_name_or_path ./FLUX \\
-        --gpus 0,1,2,3
-"""
 import argparse
 import json
 import multiprocessing as mp

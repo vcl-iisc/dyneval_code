@@ -1,11 +1,9 @@
 
 import argparse
-import json
 import os
 import random
 import sys
 import time
-import traceback
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -20,8 +18,7 @@ import torch
 from accelerate import infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from PIL import Image
 
-DEFAULT_JSON = "DYNEVAL-1K-REMAINING-PROMPTS.json"
-DEFAULT_OUT = os.path.join("DYNEVAL-1K-IMAGES-PART2", "bagel")
+DEFAULT_OUT = "outputs"
 DEFAULT_OFFLOAD = os.path.join(".tmp", "bagel_offload")
 
 SAME_DEVICE_MODULES = [
@@ -44,22 +41,6 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def load_prompts(json_path):
-    with open(json_path, encoding="utf-8") as f:
-        data = json.load(f)
-    prompts = data.get("prompts", data)
-    return sorted(prompts, key=lambda p: int(p["gid"]))
-
-
-def filter_pending(prompts, output_dir, overwrite):
-    if overwrite:
-        return prompts
-    return [
-        entry for entry in prompts
-        if not os.path.exists(os.path.join(output_dir, entry["filename"]))
-    ]
 
 
 def build_device_map(model, max_mem_per_gpu):
@@ -185,66 +166,6 @@ def generate_one(inferencer, prompt, args):
     return output
 
 
-def write_manifest(manifest, entry, seconds, seed, args):
-    with open(manifest, "a", encoding="utf-8") as mf:
-        mf.write(json.dumps({
-            "gid": entry["gid"],
-            "filename": entry["filename"],
-            "benchmark": entry.get("benchmark"),
-            "category": entry.get("category"),
-            "subcategory": entry.get("subcategory"),
-            "prompt": entry["prompt"],
-            "seconds": round(seconds, 2),
-            "seed": seed,
-            "model_path": args.model_path,
-            "think": args.think,
-            "cfg_text_scale": args.cfg_text_scale,
-            "num_timesteps": args.num_timesteps,
-            "image_size": args.image_size,
-        }, ensure_ascii=False) + "\n")
-
-
-def write_failure(fail_log, entry, exc):
-    with open(fail_log, "a", encoding="utf-8") as lf:
-        lf.write(f"{entry['gid']}\t{entry['filename']}\t{entry['prompt']}\t{exc}\n")
-        lf.write(traceback.format_exc() + "\n")
-
-
-def generate_all(inferencer, pending, args):
-    os.makedirs(args.output_dir, exist_ok=True)
-    manifest = os.path.join(args.output_dir, "generated_manifest.jsonl")
-    fail_log = os.path.join(args.output_dir, "generate_fail.log")
-    ok = bad = 0
-    total = len(pending)
-
-    for i, entry in enumerate(pending, 1):
-        dst = os.path.join(args.output_dir, entry["filename"])
-        prompt = entry["prompt"].strip()
-        seed = args.seed + int(entry["gid"]) if args.seed_per_gid else args.seed
-        set_seed(seed)
-        t0 = time.time()
-        try:
-            output = generate_one(inferencer, prompt, args)
-            image = output["image"]
-            if image is None:
-                raise RuntimeError("inferencer returned no image")
-            image.save(dst)
-            elapsed = time.time() - t0
-            write_manifest(manifest, entry, elapsed, seed, args)
-            ok += 1
-            think_note = ""
-            if args.think and output.get("text"):
-                think_note = f"  think_chars={len(output['text'])}"
-            print(f"[{i}/{total}] {entry['filename']} OK"
-                  f"  [{entry.get('benchmark')}]  {elapsed:.1f}s{think_note}", flush=True)
-        except Exception as exc:
-            bad += 1
-            write_failure(fail_log, entry, exc)
-            print(f"[{i}/{total}] {entry['filename']} FAILED: {exc}", flush=True)
-
-    return ok, bad
-
-
 def parse_cfg_interval(value):
     parts = [float(x.strip()) for x in value.split(",")]
     if len(parts) != 2:
@@ -259,17 +180,16 @@ def main():
     if pre_args.use_flash_attn:
         os.environ["BAGEL_USE_FLASH_ATTN"] = "1"
 
-    parser = argparse.ArgumentParser(description="BAGEL text-to-image (from inference.ipynb)")
+    parser = argparse.ArgumentParser(description="Generate one BAGEL image from a single prompt.")
+    parser.add_argument("prompt", help="text prompt to generate")
     parser.add_argument("--model-path", type=str, required=True,
                         help="Path to BAGEL-7B-MoT weights directory")
-    parser.add_argument("--prompt-json", default=DEFAULT_JSON,
-                        help="DYNEVAL prompts JSON for batch mode")
     parser.add_argument("--output-dir", default=DEFAULT_OUT,
-                        help="Directory to save generated PNGs")
-    parser.add_argument("--prompt", type=str, default=None,
-                        help="Single prompt (skips JSON batch mode)")
-    parser.add_argument("--output", type=str, default="output.png",
-                        help="Output path for single --prompt mode")
+                        help="Directory used with --filename")
+    parser.add_argument("--filename", type=str, default="output.png",
+                        help="Output filename when --output is not set")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Full output image path")
     parser.add_argument("--think", action="store_true",
                         help="Enable think-before-generate mode")
     parser.add_argument("--max-think-token-n", type=int, default=1000)
@@ -293,58 +213,26 @@ def main():
         help="Use flash-attn if installed (default: PyTorch SDPA only).",
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--seed-per-gid", action="store_true")
-    parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    if args.prompt is not None:
-        set_seed(args.seed)
-        print(f"Single-prompt mode: {args.prompt[:90]}", flush=True)
-        inferencer = load_inferencer(args)
-        output = generate_one(inferencer, args.prompt, args)
-        output["image"].save(args.output)
-        if args.think and output.get("text"):
-            print(output["text"], flush=True)
-        print(f"Saved {args.output}", flush=True)
-        return
-
-    prompts = load_prompts(args.prompt_json)
-    pending = filter_pending(prompts, args.output_dir, args.overwrite)
-    print(f"[BAGEL] json={len(prompts)}"
-          f"  already done={len(prompts) - len(pending)}"
-          f"  to generate={len(pending)}  -> {args.output_dir}", flush=True)
-    print(f"  model={args.model_path}", flush=True)
-    print(f"  think={args.think}  cfg_text_scale={args.cfg_text_scale}"
-          f"  num_timesteps={args.num_timesteps}  size={args.image_size}"
-          f"  seed={args.seed}", flush=True)
-
-    if args.limit:
-        pending = pending[:args.limit]
-        print(f"  limited to {len(pending)} this run", flush=True)
-
-    if not pending:
-        print("Nothing to do.", flush=True)
-        return
-
-    if args.dry_run:
-        for entry in pending[:10]:
-            print(f"  gid={entry['gid']}  {entry['filename']}"
-                  f"  [{entry.get('benchmark')}]  {entry['prompt'][:90]}", flush=True)
-        if len(pending) > 10:
-            print(f"  ... and {len(pending) - 10} more", flush=True)
-        return
+    output_path = args.output or os.path.join(args.output_dir, args.filename)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     print(f"Loading model from {args.model_path} ...", flush=True)
     t0 = time.time()
     inferencer = load_inferencer(args)
     print(f"Model ready in {time.time() - t0:.1f}s", flush=True)
 
-    ok, bad = generate_all(inferencer, pending, args)
-    print(f"\nDone BAGEL: generated={ok}  failed={bad}  -> {args.output_dir}", flush=True)
-    if bad:
-        print("Check generate_fail.log in output_dir", flush=True)
+    set_seed(args.seed)
+    start = time.time()
+    output = generate_one(inferencer, args.prompt.strip(), args)
+    image = output["image"]
+    if image is None:
+        raise RuntimeError("inferencer returned no image")
+    image.save(output_path)
+    if args.think and output.get("text"):
+        print(output["text"], flush=True)
+    print(f"Saved {output_path} in {time.time() - start:.1f}s", flush=True)
 
 
 if __name__ == "__main__":
