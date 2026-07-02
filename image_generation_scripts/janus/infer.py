@@ -1,17 +1,4 @@
-#!/usr/bin/env python3
-"""Generate Janus-Pro-7B images for DYNEVAL-1K remaining prompts.
 
-Run from the DYNEVAL project root (paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/janus/infer.py --dry-run
-    python dyneval_code/generator_scripts/janus/infer.py --limit 5
-
-Reads:
-    DYNEVAL-1K-REMAINING-PROMPTS.json
-
-Saves:
-    DYNEVAL-1K-IMAGES-PART2/janus-pro-7b/<filename from JSON>
-"""
 import argparse
 import json
 import os

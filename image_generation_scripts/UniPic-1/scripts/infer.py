@@ -1,38 +1,4 @@
-#!/usr/bin/env python3
-"""Generate UniPic text-to-image outputs for DYNEVAL-1K remaining prompts.
 
-Reads:
-    DYNEVAL-1K-REMAINING-PROMPTS.json
-
-Saves:
-    DYNEVAL-1K-IMAGES-PART2/unipic/<filename from JSON>
-
-Usage (from DYNEVAL project root or UniPic-1 repo root; paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/UniPic-1/scripts/infer.py \\
-        configs/models/qwen2_5_1_5b_kl16_mar_h.py \\
-        --checkpoint checkpoint/pytorch_model.bin
-
-    python dyneval_code/generator_scripts/UniPic-1/scripts/infer.py \\
-        configs/models/qwen2_5_1_5b_kl16_mar_h.py \\
-        --checkpoint checkpoint/pytorch_model.bin --dry-run --limit 5
-
-    # single prompt (ignores JSON)
-    python dyneval_code/generator_scripts/UniPic-1/scripts/infer.py \\
-        configs/models/qwen2_5_1_5b_kl16_mar_h.py \\
-        --checkpoint checkpoint/pytorch_model.bin \\
-        --prompt 'A golden retriever in a park.' --output output.jpg
-
-    # use all visible GPUs (default when 2+ GPUs are visible)
-    CUDA_VISIBLE_DEVICES=0,1 python dyneval_code/generator_scripts/UniPic-1/scripts/infer.py \\
-        configs/models/qwen2_5_1_5b_kl16_mar_h.py \\
-        --checkpoint checkpoint/pytorch_model.bin
-
-    # explicit GPU list
-    python dyneval_code/generator_scripts/UniPic-1/scripts/infer.py \\
-        configs/models/qwen2_5_1_5b_kl16_mar_h.py \\
-        --checkpoint checkpoint/pytorch_model.bin --gpus 0,1
-"""
 import argparse
 import json
 import multiprocessing as mp

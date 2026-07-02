@@ -1,23 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2025 Bytedance Ltd. and/or its affiliates.
-# SPDX-License-Identifier: Apache-2.0
-"""Text-to-image generation for BAGEL (converted from inference.ipynb).
 
-Batch mode reads DYNEVAL-style JSON and saves PNGs by filename.
-
-Usage (from DYNEVAL project root; paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/Bagel/scripts/infer-image-gen.py \\
-        --model-path ./weights/BAGEL-7B-MoT
-
-    python dyneval_code/generator_scripts/Bagel/scripts/infer-image-gen.py \\
-        --model-path ./weights/BAGEL-7B-MoT --dry-run --limit 5
-
-    # single prompt
-    python dyneval_code/generator_scripts/Bagel/scripts/infer-image-gen.py \\
-        --model-path ./weights/BAGEL-7B-MoT \\
-        --prompt "a car made of small cars" --output output.png
-"""
 import argparse
 import json
 import os

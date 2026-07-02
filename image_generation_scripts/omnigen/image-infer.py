@@ -1,36 +1,4 @@
-#!/usr/bin/env python3
-"""Generate missing OmniGen images for the DYNEVAL-1K set.
 
-Reads OmniGen-MISSING-PROMPTS.json (534 prompts: 129 GenEval + 405 EvalMuse).
-Already have: 466 DPG-Bench. Missing: 534.
-
-Saves:
-    <output_dir>/<gid:04d>.png   e.g. 0001.png, 0026.png
-
-Copy to main machine:
-    DYNEVAL-1K-IMAGES/OmniGen/
-
-Usage (from DYNEVAL project root; paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/omnigen/image-infer.py --dry-run
-    python dyneval_code/generator_scripts/omnigen/image-infer.py --limit 5
-    python dyneval_code/generator_scripts/omnigen/image-infer.py --gpus 0,1,2,3
-
-Remote server:
-    python dyneval_code/generator_scripts/omnigen/image-infer.py \\
-        --batch_json OmniGen-MISSING-PROMPTS.json \\
-        --output_dir ./omnigen_outputs \\
-        --model_name_or_path Shitao/OmniGen-v1 \\
-        --gpus 0,1,2,3
-
-If every prompt fails with "cannot unpack non-iterable NoneType object", your
-transformers build is too new for OmniGen's Phi3 fork. Either:
-    pip install transformers==4.45.2 peft==0.17.1 diffusers==0.30.3
-or rerun with this script (it auto-patches transformers>=4.46).
-
-"tuple index out of range" was a follow-on bug in the first patch (fixed now):
-newer Phi3DecoderLayer no longer returns past_key_value in layer_outputs.
-"""
 import argparse
 import json
 import multiprocessing as mp

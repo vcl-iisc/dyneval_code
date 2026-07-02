@@ -1,17 +1,4 @@
-#!/usr/bin/env python3
-"""Generate missing Kolors images for the DYNEVAL-1K set.
 
-Uses the Kolors repo at ./Kolors (same pipeline as scripts/sample.py).
-Loads the model once, then generates every prompt not yet present in:
-
-    DYNEVAL-1K-IMAGES/Kolors/<gid>.png
-
-Usage (from DYNEVAL project root; paths below are relative to cwd):
-
-    python dyneval_code/generator_scripts/Kolors/scripts/image-gen.py
-    python dyneval_code/generator_scripts/Kolors/scripts/image-gen.py --limit 5
-    python dyneval_code/generator_scripts/Kolors/scripts/image-gen.py --dry-run
-"""
 import argparse
 import csv
 import os
