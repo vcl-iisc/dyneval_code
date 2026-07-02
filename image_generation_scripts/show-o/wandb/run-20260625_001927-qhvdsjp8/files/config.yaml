@@ -1,0 +1,145 @@
+wandb_version: 1
+
+wandb.entity:
+  desc: null
+  value: null
+wandb.resume:
+  desc: null
+  value: auto
+wandb.run_id:
+  desc: null
+  value: wbkkzbzs
+experiment.project:
+  desc: null
+  value: demo
+experiment.name:
+  desc: null
+  value: show-o-demo
+experiment.output_dir:
+  desc: null
+  value: show-o-demo
+model.vq_model.type:
+  desc: null
+  value: magvitv2
+model.vq_model.vq_model_name:
+  desc: null
+  value: showlab/magvitv2
+model.showo.pretrained_model_path:
+  desc: null
+  value: showlab/show-o-512x512
+model.showo.w_clip_vit:
+  desc: null
+  value: false
+model.showo.vocab_size:
+  desc: null
+  value: 58498
+model.showo.llm_vocab_size:
+  desc: null
+  value: 50295
+model.showo.llm_model_path:
+  desc: null
+  value: microsoft/phi-1_5
+model.showo.codebook_size:
+  desc: null
+  value: 8192
+model.showo.num_vq_tokens:
+  desc: null
+  value: 1024
+model.showo.num_new_special_tokens:
+  desc: null
+  value: 10
+model.gradient_checkpointing:
+  desc: null
+  value: true
+dataset.gen_type:
+  desc: null
+  value: t2i
+dataset.und_type:
+  desc: null
+  value: captioning
+dataset.params.batch_size:
+  desc: null
+  value: 20
+dataset.params.shuffle_buffer_size:
+  desc: null
+  value: 1000
+dataset.params.num_workers:
+  desc: null
+  value: 32
+dataset.params.resolution:
+  desc: null
+  value: 512
+dataset.params.pin_memory:
+  desc: null
+  value: true
+dataset.params.persistent_workers:
+  desc: null
+  value: true
+dataset.preprocessing.max_seq_length:
+  desc: null
+  value: 128
+dataset.preprocessing.resolution:
+  desc: null
+  value: 512
+dataset.preprocessing.center_crop:
+  desc: null
+  value: false
+dataset.preprocessing.random_flip:
+  desc: null
+  value: false
+training.gradient_accumulation_steps:
+  desc: null
+  value: 1
+training.cond_dropout_prob:
+  desc: null
+  value: 0.1
+training.batch_size:
+  desc: null
+  value: 20
+config:
+  desc: null
+  value: configs/showo_demo_512x512.yaml
+batch_size:
+  desc: null
+  value: 1
+validation_prompts_file:
+  desc: null
+  value: validation_prompts/showoprompts.txt
+guidance_scale:
+  desc: null
+  value: 5
+generation_timesteps:
+  desc: null
+  value: 50
+mode:
+  desc: null
+  value: t2i
+_wandb:
+  desc: null
+  value:
+    python_version: 3.10.20
+    cli_version: 0.17.0
+    framework: huggingface
+    huggingface_version: 4.41.1
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1782326967
+    t:
+      1:
+      - 1
+      - 11
+      - 41
+      - 49
+      - 55
+      - 71
+      - 83
+      3:
+      - 13
+      - 16
+      - 23
+      4: 3.10.20
+      5: 0.17.0
+      6: 4.41.1
+      8:
+      - 5
+      13: linux-x86_64

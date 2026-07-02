@@ -1,0 +1,131 @@
+2026-06-25 00:19:27,037 INFO    StreamThr :1448011 [internal.py:wandb_internal():85] W&B internal server running at pid: 1448011, started at: 2026-06-25 00:19:27.035658
+2026-06-25 00:19:27,042 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: status
+2026-06-25 00:19:27,048 INFO    WriterThread:1448011 [datastore.py:open_for_write():87] open: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/run-qhvdsjp8.wandb
+2026-06-25 00:19:27,049 DEBUG   SenderThread:1448011 [sender.py:send():378] send: header
+2026-06-25 00:19:27,058 DEBUG   SenderThread:1448011 [sender.py:send():378] send: run
+2026-06-25 00:19:28,114 INFO    SenderThread:1448011 [dir_watcher.py:__init__():211] watching files in: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files
+2026-06-25 00:19:28,115 INFO    SenderThread:1448011 [sender.py:_start_run_threads():1123] run started: qhvdsjp8 with start time 1782326967.033988
+2026-06-25 00:19:28,129 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: check_version
+2026-06-25 00:19:28,130 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: check_version
+2026-06-25 00:19:28,320 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: run_start
+2026-06-25 00:19:28,351 DEBUG   HandlerThread:1448011 [system_info.py:__init__():26] System info init
+2026-06-25 00:19:28,352 DEBUG   HandlerThread:1448011 [system_info.py:__init__():41] System info init done
+2026-06-25 00:19:28,352 INFO    HandlerThread:1448011 [system_monitor.py:start():194] Starting system monitor
+2026-06-25 00:19:28,352 INFO    SystemMonitor:1448011 [system_monitor.py:_start():158] Starting system asset monitoring threads
+2026-06-25 00:19:28,352 INFO    HandlerThread:1448011 [system_monitor.py:probe():214] Collecting system info
+2026-06-25 00:19:28,353 INFO    SystemMonitor:1448011 [interfaces.py:start():188] Started cpu monitoring
+2026-06-25 00:19:28,355 INFO    SystemMonitor:1448011 [interfaces.py:start():188] Started disk monitoring
+2026-06-25 00:19:28,357 INFO    SystemMonitor:1448011 [interfaces.py:start():188] Started gpu monitoring
+2026-06-25 00:19:28,359 INFO    SystemMonitor:1448011 [interfaces.py:start():188] Started memory monitoring
+2026-06-25 00:19:28,361 INFO    SystemMonitor:1448011 [interfaces.py:start():188] Started network monitoring
+2026-06-25 00:19:28,388 DEBUG   HandlerThread:1448011 [system_info.py:probe():150] Probing system
+2026-06-25 00:19:28,391 DEBUG   HandlerThread:1448011 [system_info.py:_probe_git():135] Probing git
+2026-06-25 00:19:28,403 DEBUG   HandlerThread:1448011 [system_info.py:_probe_git():143] Probing git done
+2026-06-25 00:19:28,404 DEBUG   HandlerThread:1448011 [system_info.py:probe():198] Probing system done
+2026-06-25 00:19:28,404 DEBUG   HandlerThread:1448011 [system_monitor.py:probe():223] {'os': 'Linux-6.8.0-111-generic-x86_64-with-glibc2.35', 'python': '3.10.20', 'heartbeatAt': '2026-06-24T18:49:28.388262', 'startedAt': '2026-06-24T18:49:27.023332', 'docker': None, 'cuda': None, 'args': ('config=configs/showo_demo_512x512.yaml', 'batch_size=1', 'validation_prompts_file=validation_prompts/showoprompts.txt', 'guidance_scale=5', 'generation_timesteps=50', 'mode=t2i'), 'state': 'running', 'program': '/mnt/18_TB/shyam/dyneval_project/show-o/inference_t2i.py', 'codePathLocal': 'inference_t2i.py', 'codePath': 'inference_t2i.py', 'git': {'remote': 'https://github.com/showlab/show-o', 'commit': '45a5a2de01d1ebd10cd5864d29310a76476cdf23'}, 'email': 'smokinhotchicken502@gmail.com', 'root': '/mnt/18_TB/shyam/dyneval_project/show-o', 'host': 'test', 'username': 'test', 'executable': '/home/test/miniconda3/envs/showo/bin/python3', 'cpu_count': 16, 'cpu_count_logical': 32, 'cpu_freq': {'current': 862.470375, 'min': 800.0, 'max': 3200.0}, 'cpu_freq_per_core': [{'current': 800.139, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.002, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.238, 'min': 800.0, 'max': 3200.0}, {'current': 1099.778, 'min': 800.0, 'max': 3200.0}, {'current': 1499.994, 'min': 800.0, 'max': 3200.0}, {'current': 826.803, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.098, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 799.864, 'min': 800.0, 'max': 3200.0}, {'current': 899.899, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 800.0, 'min': 800.0, 'max': 3200.0}, {'current': 799.341, 'min': 800.0, 'max': 3200.0}], 'disk': {'/': {'total': 915.3232879638672, 'used': 839.1931533813477}}, 'gpu': 'NVIDIA RTX A6000', 'gpu_count': 2, 'gpu_devices': [{'name': 'NVIDIA RTX A6000', 'memory_total': 51527024640}, {'name': 'NVIDIA RTX 6000 Ada Generation', 'memory_total': 51527024640}], 'memory': {'total': 62.53617477416992}}
+2026-06-25 00:19:28,404 INFO    HandlerThread:1448011 [system_monitor.py:probe():224] Finished collecting system info
+2026-06-25 00:19:28,404 INFO    HandlerThread:1448011 [system_monitor.py:probe():227] Publishing system info
+2026-06-25 00:19:28,404 DEBUG   HandlerThread:1448011 [system_info.py:_save_conda():207] Saving list of conda packages installed into the current environment
+2026-06-25 00:19:29,119 INFO    Thread-12 :1448011 [dir_watcher.py:_on_file_created():271] file/dir created: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/conda-environment.yaml
+2026-06-25 00:19:34,370 INFO    memory    :1448011 [interfaces.py:monitor():138] Process proc.memory.rssMB has exited.
+2026-06-25 00:19:34,371 DEBUG   SystemMonitor:1448011 [system_monitor.py:_start():172] Starting system metrics aggregation loop
+2026-06-25 00:19:34,372 DEBUG   SystemMonitor:1448011 [system_monitor.py:_start():179] Finished system metrics aggregation loop
+2026-06-25 00:19:34,372 DEBUG   SystemMonitor:1448011 [system_monitor.py:_start():183] Publishing last batch of metrics
+2026-06-25 00:19:35,594 DEBUG   HandlerThread:1448011 [system_info.py:_save_conda():222] Saving conda packages done
+2026-06-25 00:19:35,596 INFO    HandlerThread:1448011 [system_monitor.py:probe():229] Finished publishing system info
+2026-06-25 00:19:35,600 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: status_report
+2026-06-25 00:19:35,600 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: poll_exit
+2026-06-25 00:19:35,602 DEBUG   SenderThread:1448011 [sender.py:send():378] send: exit
+2026-06-25 00:19:35,603 INFO    SenderThread:1448011 [sender.py:send_exit():585] handling exit code: 255
+2026-06-25 00:19:35,603 INFO    SenderThread:1448011 [sender.py:send_exit():587] handling runtime: 7
+2026-06-25 00:19:35,607 INFO    SenderThread:1448011 [sender.py:_save_file():1389] saving file wandb-summary.json with policy end
+2026-06-25 00:19:35,608 INFO    SenderThread:1448011 [sender.py:send_exit():593] send defer
+2026-06-25 00:19:35,608 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: poll_exit
+2026-06-25 00:19:35,608 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,609 DEBUG   SenderThread:1448011 [sender.py:send():378] send: stats
+2026-06-25 00:19:35,609 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 0
+2026-06-25 00:19:35,611 DEBUG   SenderThread:1448011 [sender.py:send():378] send: files
+2026-06-25 00:19:35,612 INFO    SenderThread:1448011 [sender.py:_save_file():1389] saving file wandb-metadata.json with policy now
+2026-06-25 00:19:35,613 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,613 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 0
+2026-06-25 00:19:35,613 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 1
+2026-06-25 00:19:35,614 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,614 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 1
+2026-06-25 00:19:35,615 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,615 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 1
+2026-06-25 00:19:35,615 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 2
+2026-06-25 00:19:35,616 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,616 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 2
+2026-06-25 00:19:35,616 INFO    HandlerThread:1448011 [system_monitor.py:finish():203] Stopping system monitor
+2026-06-25 00:19:35,617 INFO    HandlerThread:1448011 [interfaces.py:finish():200] Joined cpu monitor
+2026-06-25 00:19:35,617 INFO    HandlerThread:1448011 [interfaces.py:finish():200] Joined disk monitor
+2026-06-25 00:19:35,618 INFO    HandlerThread:1448011 [interfaces.py:finish():200] Joined gpu monitor
+2026-06-25 00:19:35,624 INFO    HandlerThread:1448011 [interfaces.py:finish():200] Joined memory monitor
+2026-06-25 00:19:35,624 INFO    HandlerThread:1448011 [interfaces.py:finish():200] Joined network monitor
+2026-06-25 00:19:35,625 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,625 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 2
+2026-06-25 00:19:35,625 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 3
+2026-06-25 00:19:35,626 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,626 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 3
+2026-06-25 00:19:35,627 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,627 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 3
+2026-06-25 00:19:35,627 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 4
+2026-06-25 00:19:35,627 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,628 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 4
+2026-06-25 00:19:35,628 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,629 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 4
+2026-06-25 00:19:35,629 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 5
+2026-06-25 00:19:35,629 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,629 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 5
+2026-06-25 00:19:35,630 DEBUG   SenderThread:1448011 [sender.py:send():378] send: summary
+2026-06-25 00:19:35,631 INFO    SenderThread:1448011 [sender.py:_save_file():1389] saving file wandb-summary.json with policy end
+2026-06-25 00:19:35,631 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,632 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 5
+2026-06-25 00:19:35,632 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 6
+2026-06-25 00:19:35,632 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,632 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 6
+2026-06-25 00:19:35,633 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,633 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 6
+2026-06-25 00:19:35,634 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 7
+2026-06-25 00:19:35,634 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: status_report
+2026-06-25 00:19:35,634 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,635 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 7
+2026-06-25 00:19:35,635 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,636 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 7
+2026-06-25 00:19:35,636 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 8
+2026-06-25 00:19:35,636 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,637 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 8
+2026-06-25 00:19:35,638 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,638 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 8
+2026-06-25 00:19:35,638 INFO    SenderThread:1448011 [job_builder.py:build():432] Attempting to build job artifact
+2026-06-25 00:19:35,639 WARNING SenderThread:1448011 [job_builder.py:_log_if_verbose():267] No requirements.txt found, not creating job artifact. See https://docs.wandb.ai/guides/launch/create-job
+2026-06-25 00:19:35,639 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 9
+2026-06-25 00:19:35,639 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:35,639 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 9
+2026-06-25 00:19:35,640 DEBUG   SenderThread:1448011 [sender.py:send_request():405] send_request: defer
+2026-06-25 00:19:35,640 INFO    SenderThread:1448011 [sender.py:send_request_defer():609] handle sender defer: 9
+2026-06-25 00:19:35,640 INFO    SenderThread:1448011 [dir_watcher.py:finish():358] shutting down directory watcher
+2026-06-25 00:19:36,052 WARNING StreamThr :1448011 [internal.py:is_dead():413] Internal process exiting, parent pid 1447905 disappeared
+2026-06-25 00:19:36,052 ERROR   StreamThr :1448011 [internal.py:wandb_internal():151] Internal process shutdown.
+2026-06-25 00:19:36,118 INFO    Thread-12 :1448011 [dir_watcher.py:_on_file_modified():288] file/dir modified: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/conda-environment.yaml
+2026-06-25 00:19:36,120 INFO    SenderThread:1448011 [dir_watcher.py:_on_file_created():271] file/dir created: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/wandb-metadata.json
+2026-06-25 00:19:36,120 INFO    SenderThread:1448011 [dir_watcher.py:_on_file_created():271] file/dir created: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/wandb-summary.json
+2026-06-25 00:19:36,121 INFO    SenderThread:1448011 [dir_watcher.py:finish():388] scan: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files
+2026-06-25 00:19:36,121 INFO    SenderThread:1448011 [dir_watcher.py:finish():402] scan save: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/config.yaml config.yaml
+2026-06-25 00:19:36,122 INFO    SenderThread:1448011 [dir_watcher.py:finish():402] scan save: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/conda-environment.yaml conda-environment.yaml
+2026-06-25 00:19:36,123 INFO    SenderThread:1448011 [dir_watcher.py:finish():402] scan save: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/wandb-metadata.json wandb-metadata.json
+2026-06-25 00:19:36,128 INFO    SenderThread:1448011 [dir_watcher.py:finish():402] scan save: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/wandb-summary.json wandb-summary.json
+2026-06-25 00:19:36,135 INFO    SenderThread:1448011 [sender.py:transition_state():613] send defer: 10
+2026-06-25 00:19:36,135 INFO    SenderThread:1448011 [sender.py:finish():1545] shutting down sender
+2026-06-25 00:19:36,135 INFO    SenderThread:1448011 [file_pusher.py:finish():169] shutting down file pusher
+2026-06-25 00:19:36,136 DEBUG   HandlerThread:1448011 [handler.py:handle_request():158] handle_request: defer
+2026-06-25 00:19:36,136 INFO    SenderThread:1448011 [file_pusher.py:join():175] waiting for file pusher
+2026-06-25 00:19:36,142 INFO    HandlerThread:1448011 [handler.py:handle_request_defer():184] handle defer: 10
+2026-06-25 00:19:36,142 INFO    HandlerThread:1448011 [handler.py:finish():882] shutting down handler
+2026-06-25 00:19:36,143 INFO    WriterThread:1448011 [datastore.py:close():296] close: /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/run-qhvdsjp8.wandb
+2026-06-25 00:19:36,856 INFO    wandb-upload_0:1448011 [upload_job.py:push():130] Uploaded file /tmp/tmp4bprui2cwandb/vjppdsc9-wandb-metadata.json
+2026-06-25 00:19:37,162 INFO    wandb-upload_3:1448011 [upload_job.py:push():130] Uploaded file /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/wandb-summary.json
+2026-06-25 00:19:37,193 INFO    wandb-upload_1:1448011 [upload_job.py:push():130] Uploaded file /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/config.yaml
+2026-06-25 00:19:37,216 INFO    wandb-upload_2:1448011 [upload_job.py:push():130] Uploaded file /mnt/18_TB/shyam/dyneval_project/show-o/wandb/run-20260625_001927-qhvdsjp8/files/conda-environment.yaml
+2026-06-25 00:19:37,647 INFO    SenderThread:1448011 [file_stream.py:finish():601] file stream finish called
+2026-06-25 00:19:39,071 INFO    SenderThread:1448011 [file_stream.py:finish():605] file stream finish is done

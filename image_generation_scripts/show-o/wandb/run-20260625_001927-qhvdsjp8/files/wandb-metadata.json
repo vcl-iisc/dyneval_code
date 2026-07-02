@@ -1,0 +1,219 @@
+{
+    "os": "Linux-6.8.0-111-generic-x86_64-with-glibc2.35",
+    "python": "3.10.20",
+    "heartbeatAt": "2026-06-24T18:49:28.388262",
+    "startedAt": "2026-06-24T18:49:27.023332",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "config=configs/showo_demo_512x512.yaml",
+        "batch_size=1",
+        "validation_prompts_file=validation_prompts/showoprompts.txt",
+        "guidance_scale=5",
+        "generation_timesteps=50",
+        "mode=t2i"
+    ],
+    "state": "running",
+    "program": "/mnt/18_TB/shyam/dyneval_project/show-o/inference_t2i.py",
+    "codePathLocal": "inference_t2i.py",
+    "codePath": "inference_t2i.py",
+    "git": {
+        "remote": "https://github.com/showlab/show-o",
+        "commit": "45a5a2de01d1ebd10cd5864d29310a76476cdf23"
+    },
+    "email": "smokinhotchicken502@gmail.com",
+    "root": "/mnt/18_TB/shyam/dyneval_project/show-o",
+    "host": "test",
+    "username": "test",
+    "executable": "/home/test/miniconda3/envs/showo/bin/python3",
+    "cpu_count": 16,
+    "cpu_count_logical": 32,
+    "cpu_freq": {
+        "current": 862.470375,
+        "min": 800.0,
+        "max": 3200.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 800.139,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.002,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.238,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 1099.778,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 1499.994,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 826.803,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.098,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 799.864,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 899.899,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3200.0
+        },
+        {
+            "current": 799.341,
+            "min": 800.0,
+            "max": 3200.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 915.3232879638672,
+            "used": 839.1931533813477
+        }
+    },
+    "gpu": "NVIDIA RTX A6000",
+    "gpu_count": 2,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX 6000 Ada Generation",
+            "memory_total": 51527024640
+        }
+    ],
+    "memory": {
+        "total": 62.53617477416992
+    }
+}
