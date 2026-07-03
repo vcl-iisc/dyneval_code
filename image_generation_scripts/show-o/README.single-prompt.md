@@ -19,3 +19,5 @@ Common config overrides:
 ```bash
 seed=123 guidance_scale=7.5 num_inference_steps=50 filename=sample.png
 ```
+
+For more info on setting up conda env or on image generation refer to offifial repo https://github.com/showlab/show-o

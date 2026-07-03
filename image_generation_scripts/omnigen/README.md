@@ -19,3 +19,5 @@ Common options:
 ```
 
 Use `--gpu 0` to expose one GPU as `cuda:0`.
+
+For more info on setting up conda env or on image generation refer to offifial repo https://github.com/vectorspacelab/omnigen

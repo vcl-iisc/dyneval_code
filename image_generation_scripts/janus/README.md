@@ -17,3 +17,4 @@ Common options:
 ```bash
 --model_path ./JANUS-PRO-MODEL --seed 123 --img_size 384 --cfg_weight 5.0 --temperature 1.0
 ```
+For info regarding setting up conda env and other details on image generation refer to offical repo https://github.com/deepseek-ai/janus

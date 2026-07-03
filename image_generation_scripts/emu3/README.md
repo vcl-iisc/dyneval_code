@@ -12,9 +12,4 @@ By default the image is saved as `outputs/output.png`. Override it with either `
 python image-gen.py "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.png
 ```
 
-Common options:
-
-```bash
---ratio 1:1 --guidance_scale 3.0 --width 1024 --height 1024
-```
-
+For info regarding setting up conda env and other details refer to official repo https://github.com/baaivision/emu3

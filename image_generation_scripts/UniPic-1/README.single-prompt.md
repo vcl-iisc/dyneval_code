@@ -18,4 +18,5 @@ Common options:
 --seed 42 --image_size 1024 --num_iter 32 --cfg 3.0 --temperature 1.0
 ```
 
-Use `--gpu 0` to expose one GPU as `cuda:0`.
+
+For more info on setting up conda env or on image generation refer to offifial repo https://github.com/SkyworkAI/UniPic/tree/main/UniPic-1

@@ -17,3 +17,4 @@ Common options:
 ```bash
 --seed 66 --height 1024 --width 1024 --num_inference_steps 50 --guidance_scale 5.0
 ```
+For info regarding setting up conda env or other details on setting up conda env refer to official repo https://github.com/Kwai-Kolors/Kolors

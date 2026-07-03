@@ -11,3 +11,4 @@ By default the image is saved as `outputs/output.png`. Override it with either `
 ```bash
 python scripts/infer-image-gen.py "a cinematic photo of a red chair beside a window" --model-path /path/to/BAGEL-7B-MoT --output ./outputs/red-chair.png
 ```
+For info on setting up conda env or other details in generating image, refer to official repo https://github.com/ByteDance-Seed/Bagel/

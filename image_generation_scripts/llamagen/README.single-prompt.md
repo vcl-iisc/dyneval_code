@@ -17,3 +17,4 @@ Common options:
 ```bash
 --seed 123 --image-size 512 --cfg-scale 7.5 --temperature 1.0 --top-k 1000
 ```
+For info regarding setting up conda env or other details on image generation refer to official repo https://github.com/foundationvision/llamagen

@@ -19,3 +19,5 @@ Common options:
 ```
 
 Use `--input_image_path image.png` for image-conditioned generation. Existing offload/cache options such as `--enable_model_cpu_offload`, `--enable_group_offload`, `--enable_teacache`, and `--enable_taylorseer` are still available.
+
+For more info on setting up conda env or on image generation refer to offifial repo https://github.com/VectorSpaceLab/OmniGen2

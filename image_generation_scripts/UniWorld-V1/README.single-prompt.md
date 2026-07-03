@@ -19,3 +19,5 @@ Common options:
 ```
 
 Use `--task_head_path` when `task_head_final.pt` is not located under the model path.
+
+For more info on setting up conda env or on image generation refer to offifial repo https://github.com/PKU-YuanGroup/UniWorld/tree/main/UniWorld-V1
