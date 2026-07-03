@@ -1,21 +1,55 @@
 # DeepFloyd IF-XL single-prompt generation
 
-Generate one image by passing one prompt directly on the command line. The script no longer reads a prompts JSON file.
+This folder contains a one-prompt image generation entry point for `infer.py`. Run commands from this folder unless noted otherwise.
+
+## Setup
+
+1. Create or activate a Python environment with PyTorch, CUDA, and this model's dependencies.
+2. Install the dependencies required by this script, usually `torch`, `diffusers`, `transformers`, `accelerate`, and `Pillow` for local diffusion models.
+3. If the model is gated or private, authenticate before the first run:
+
+```bash
+huggingface-cli login
+```
+
+API-backed folders use their provider API key instead of Hugging Face login; see the notes below for those cases.
+
+## Generate One Image
 
 ```bash
 python infer.py "a cinematic photo of a red chair beside a window"
 ```
 
-By default the image is saved as `outputs/output.png`. Override it with either `--output` or `--output_dir` plus `--filename`:
+The default output is `outputs/output.png` unless this README shows a different file extension. To choose the exact output path:
 
 ```bash
 python infer.py "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.png
 ```
 
-Common options:
+You can also keep the default output directory and change only the filename with `--filename` when the script supports it.
 
-```bash
---seed 123 --height 1024 --width 1024 --num_inference_steps 50
+## Model Source
+
+Default Hugging Face model:
+
+```text
+DeepFloyd/IF-I-XL-v1.0
 ```
 
-Use `--torch_dtype float16` or `--cpu_offload` when needed for the local hardware.
+Hugging Face model page: https://huggingface.co/DeepFloyd/IF-I-XL-v1.0
+
+## Useful Options
+
+```bash
+--model_id DeepFloyd/IF-I-XL-v1.0 --torch_dtype bfloat16 --seed 123 --cpu_offload
+```
+
+## Notes
+- The script accepts one prompt as the positional argument and does not read a JSON prompt file.
+- This script runs the stage-I IF model and saves the generated image from that pipeline.
+
+## Quick Troubleshooting
+
+- If model download fails, confirm that the Hugging Face repo id above is accessible and that you accepted any required license.
+- If CUDA memory is not enough, try the listed CPU/offload option if the script has one, lower image size, or run on a larger GPU.
+- If imports fail, install the requirements for this folder inside the active environment.

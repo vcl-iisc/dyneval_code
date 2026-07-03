@@ -16,6 +16,8 @@ from PIL import Image
 from src.builder import BUILDER
 
 DEFAULT_OUT = "outputs"
+DEFAULT_MODEL_REPO = "Skywork/Skywork-UniPic-1.5B"
+DEFAULT_CHECKPOINT_FILE = "pytorch_model.bin"
 
 
 def configure_torch(disable_cudnn=False):
@@ -68,6 +70,31 @@ def resolve_model_paths(config, checkpoint_path, model_dir=None):
     return model_dir
 
 
+def resolve_hf_checkpoint(checkpoint_path, model_dir=None):
+    if os.path.isfile(checkpoint_path):
+        return checkpoint_path, model_dir
+
+    repo_id = model_dir or checkpoint_path
+    if "/" not in repo_id:
+        return checkpoint_path, model_dir
+
+    from huggingface_hub import snapshot_download
+
+    snapshot_dir = snapshot_download(repo_id=repo_id)
+    checkpoint_file = (
+        DEFAULT_CHECKPOINT_FILE
+        if checkpoint_path == repo_id
+        else os.path.basename(checkpoint_path)
+    )
+    resolved_checkpoint = os.path.join(snapshot_dir, checkpoint_file)
+    if not os.path.isfile(resolved_checkpoint):
+        raise FileNotFoundError(
+            f"Could not find {checkpoint_file} in Hugging Face repo {repo_id}. "
+            f"Downloaded snapshot: {snapshot_dir}"
+        )
+    return resolved_checkpoint, snapshot_dir
+
+
 def warn_cuda_env():
     if "CUDA_VISIBLE_DEVICE" in os.environ and "CUDA_VISIBLE_DEVICES" not in os.environ:
         print(
@@ -80,6 +107,7 @@ def warn_cuda_env():
 def load_model(config_path, checkpoint_path, attn_implementation="eager", model_dir=None,
                disable_cudnn=False):
     configure_torch(disable_cudnn=disable_cudnn)
+    checkpoint_path, model_dir = resolve_hf_checkpoint(checkpoint_path, model_dir)
     config = Config.fromfile(config_path)
     model_dir = resolve_model_paths(config, checkpoint_path, model_dir)
     print(f"Model components from: {model_dir}", flush=True)
@@ -157,7 +185,8 @@ def main():
     parser = argparse.ArgumentParser(description="Generate one UniPic image from a single prompt.")
     parser.add_argument("config", help="config file path")
     parser.add_argument("prompt", help="text prompt to generate")
-    parser.add_argument("--checkpoint", type=str, required=True)
+    parser.add_argument("--checkpoint", type=str, default=DEFAULT_MODEL_REPO,
+                        help="UniPic Hugging Face repo id or local pytorch_model.bin path")
     parser.add_argument(
         "--model-dir",
         type=str,

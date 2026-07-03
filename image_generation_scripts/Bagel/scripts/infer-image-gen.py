@@ -20,6 +20,7 @@ from PIL import Image
 
 DEFAULT_OUT = "outputs"
 DEFAULT_OFFLOAD = os.path.join(".tmp", "bagel_offload")
+DEFAULT_MODEL_PATH = "ByteDance-Seed/BAGEL-7B-MoT"
 
 SAME_DEVICE_MODULES = [
     "language_model.model.embed_tokens",
@@ -173,6 +174,16 @@ def parse_cfg_interval(value):
     return parts
 
 
+def resolve_model_path(model_path):
+    if os.path.isdir(model_path):
+        return model_path
+    if "/" in model_path:
+        from huggingface_hub import snapshot_download
+
+        return snapshot_download(repo_id=model_path)
+    return model_path
+
+
 def main():
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--use-flash-attn", action="store_true")
@@ -182,8 +193,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="Generate one BAGEL image from a single prompt.")
     parser.add_argument("prompt", help="text prompt to generate")
-    parser.add_argument("--model-path", type=str, required=True,
-                        help="Path to BAGEL-7B-MoT weights directory")
+    parser.add_argument("--model-path", type=str, default=DEFAULT_MODEL_PATH,
+                        help="BAGEL-7B-MoT Hugging Face repo id or local weights directory")
     parser.add_argument("--output-dir", default=DEFAULT_OUT,
                         help="Directory used with --filename")
     parser.add_argument("--filename", type=str, default="output.png",
@@ -214,6 +225,7 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    args.model_path = resolve_model_path(args.model_path)
 
     output_path = args.output or os.path.join(args.output_dir, args.filename)
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)

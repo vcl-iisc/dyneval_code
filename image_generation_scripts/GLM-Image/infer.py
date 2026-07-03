@@ -5,7 +5,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = './GLM-Image-Model'
+DEFAULT_MODEL = 'zai-org/GLM-Image'
 
 
 def configure_torch():

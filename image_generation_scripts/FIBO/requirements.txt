@@ -1,0 +1,12 @@
+# Based on the briaai/FIBO Hugging Face model card.
+git+https://github.com/huggingface/diffusers
+torch
+torchvision
+transformers
+accelerate
+safetensors
+pillow
+google-genai
+boltons
+ujson
+sentencepiece

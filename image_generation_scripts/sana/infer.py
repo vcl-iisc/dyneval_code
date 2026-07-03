@@ -5,7 +5,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = 'Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers'
+DEFAULT_MODEL = 'Efficient-Large-Model/Sana_1600M_1024px'
 
 
 def configure_torch():

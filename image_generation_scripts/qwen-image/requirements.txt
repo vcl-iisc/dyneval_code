@@ -1,0 +1,9 @@
+# Qwen-Image is distributed as a Diffusers pipeline; source Diffusers keeps new pipeline support available.
+git+https://github.com/huggingface/diffusers
+torch
+transformers
+accelerate
+safetensors
+pillow
+sentencepiece
+protobuf

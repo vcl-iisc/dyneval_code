@@ -1,20 +1,63 @@
 # LlamaGen single-prompt generation
 
-Generate one image by passing one prompt directly on the command line. The script no longer uses the built-in demo prompt list.
+This folder contains a one-prompt image generation entry point for `autoregressive/sample/image-gen.py`. Run commands from this folder unless noted otherwise.
+
+## Setup
+
+1. Create or activate a Python environment with PyTorch, CUDA, and this model's dependencies.
+2. Install the local dependency file when starting from a fresh environment:
 
 ```bash
-python autoregressive/sample/image-gen.py "a cinematic photo of a red chair beside a window" --gpt-ckpt /path/to/gpt.ckpt --vq-ckpt /path/to/vq.ckpt
+pip install -r requirements.txt
 ```
 
-By default the image is saved as `outputs/output.png`. Override it with either `--output` or `--output-dir` plus `--filename`:
+3. If the model is gated or private, authenticate before the first run:
 
 ```bash
-python autoregressive/sample/image-gen.py "a cinematic photo of a red chair beside a window" --gpt-ckpt /path/to/gpt.ckpt --vq-ckpt /path/to/vq.ckpt --output ./outputs/red-chair.png
+huggingface-cli login
 ```
 
-Common options:
+API-backed folders use their provider API key instead of Hugging Face login; see the notes below for those cases.
+
+## Generate One Image
 
 ```bash
---seed 123 --image-size 512 --cfg-scale 7.5 --temperature 1.0 --top-k 1000
+python autoregressive/sample/image-gen.py "a cinematic photo of a red chair beside a window"
 ```
-For info regarding setting up conda env or other details on image generation refer to official repo https://github.com/foundationvision/llamagen
+
+The default output is `outputs/output.png` unless this README shows a different file extension. To choose the exact output path:
+
+```bash
+python autoregressive/sample/image-gen.py "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.png
+```
+
+You can also keep the default output directory and change only the filename with `--filename` when the script supports it.
+
+## Model Source
+
+Default Hugging Face model:
+
+```text
+FoundationVision/LlamaGen
+```
+
+Hugging Face model page: https://huggingface.co/FoundationVision/LlamaGen
+
+Official project/code: https://github.com/FoundationVision/LlamaGen
+
+## Useful Options
+
+```bash
+--gpt-repo FoundationVision/LlamaGen --gpt-ckpt t2i_XL_stage2_512.pt --vq-repo FoundationVision/LlamaGen --vq-ckpt vq_ds16_t2i.pt --image-size 512 --cfg-scale 7.5 --seed 123
+```
+
+## Notes
+- The script accepts one prompt as the positional argument and does not read a JSON prompt file.
+- The GPT and VQ checkpoints default to files in the `FoundationVision/LlamaGen` Hugging Face repo.
+- The T5 encoder uses the existing LlamaGen T5 loading path; keep `--t5-path pretrained_models/t5-ckpt` unless your environment uses a different cache.
+
+## Quick Troubleshooting
+
+- If model download fails, confirm that the Hugging Face repo id above is accessible and that you accepted any required license.
+- If CUDA memory is not enough, try the listed CPU/offload option if the script has one, lower image size, or run on a larger GPU.
+- If imports fail, install the requirements for this folder inside the active environment.

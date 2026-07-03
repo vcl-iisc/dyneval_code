@@ -27,6 +27,9 @@ from univa.utils.flux_pipeline import FluxPipeline
 
 DEFAULT_OUT = "outputs"
 DEFAULT_SEED = 42
+DEFAULT_MODEL_PATH = "PKU-YuanGroup/UniWorld-V1"
+DEFAULT_FLUX_PATH = "black-forest-labs/FLUX.1-dev"
+DEFAULT_SIGLIP_PATH = "google/siglip-so400m-patch14-384"
 
 set_seed(DEFAULT_SEED)
 if torch.cuda.is_available():
@@ -57,6 +60,10 @@ def resolve_pretrained_path(model_path):
                 resolved = os.path.join(snapshots_dir, snapshots[-1])
                 print(f"Resolved model_path to snapshot: {resolved}")
                 return resolved
+    if "/" in model_path:
+        from huggingface_hub import snapshot_download
+
+        return snapshot_download(repo_id=model_path)
     return model_path
 
 
@@ -318,15 +325,16 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("prompt", help="text prompt to generate")
-    parser.add_argument("--model_path", type=str, required=True)
+    parser.add_argument("--model_path", type=str, default=DEFAULT_MODEL_PATH,
+                        help="UniWorld-V1 Hugging Face repo id or local model directory")
     parser.add_argument(
         "--task_head_path",
         type=str,
         default=None,
         help="Optional explicit path to task_head_final.pt",
     )
-    parser.add_argument("--flux_path", type=str, required=True)
-    parser.add_argument("--siglip_path", type=str, required=True)
+    parser.add_argument("--flux_path", type=str, default=DEFAULT_FLUX_PATH)
+    parser.add_argument("--siglip_path", type=str, default=DEFAULT_SIGLIP_PATH)
     parser.add_argument(
         "--attn_implementation",
         type=str,

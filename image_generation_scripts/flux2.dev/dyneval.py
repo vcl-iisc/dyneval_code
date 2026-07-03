@@ -12,7 +12,7 @@ import torch
 from huggingface_hub import get_token
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = "./FLUX2-DEV-MODEL"
+DEFAULT_MODEL = "black-forest-labs/FLUX.2-dev"
 REMOTE_ENCODER_URL = "https://remote-text-encoder-flux-2.huggingface.co/predict"
 GENERATOR_DEVICE = "cuda:0"
 

@@ -1,0 +1,11 @@
+# FLUX.2 support may require the latest Diffusers pipeline code.
+git+https://github.com/huggingface/diffusers
+torch
+transformers
+accelerate
+safetensors
+huggingface_hub
+pillow
+requests
+sentencepiece
+protobuf

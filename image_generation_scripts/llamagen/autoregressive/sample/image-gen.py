@@ -16,7 +16,17 @@ from autoregressive.models.generate import generate
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 DEFAULT_OUT = "outputs"
+DEFAULT_HF_REPO = "FoundationVision/LlamaGen"
+DEFAULT_GPT_CKPT = "t2i_XL_stage2_512.pt"
+DEFAULT_VQ_CKPT = "vq_ds16_t2i.pt"
 
+
+def resolve_checkpoint(repo_id, filename_or_path):
+    if os.path.isfile(filename_or_path):
+        return filename_or_path
+    from huggingface_hub import hf_hub_download
+
+    return hf_hub_download(repo_id=repo_id, filename=filename_or_path)
 
 
 def main(args):
@@ -33,7 +43,8 @@ def main(args):
         codebook_embed_dim=args.codebook_embed_dim)
     vq_model.to(device)
     vq_model.eval()
-    checkpoint = torch.load(args.vq_ckpt, map_location="cpu")
+    vq_ckpt = resolve_checkpoint(args.vq_repo, args.vq_ckpt)
+    checkpoint = torch.load(vq_ckpt, map_location="cpu")
     vq_model.load_state_dict(checkpoint["model"])
     del checkpoint
     print(f"image tokenizer is loaded")
@@ -47,7 +58,8 @@ def main(args):
         model_type=args.gpt_type,
     ).to(device=device, dtype=precision)
 
-    checkpoint = torch.load(args.gpt_ckpt, map_location="cpu")
+    gpt_ckpt = resolve_checkpoint(args.gpt_repo, args.gpt_ckpt)
+    checkpoint = torch.load(gpt_ckpt, map_location="cpu")
  
     if "model" in checkpoint:  # ddp
         model_weight = checkpoint["model"]
@@ -72,10 +84,9 @@ def main(args):
     else:
         print(f"no need to compile model in demo") 
     
-    assert os.path.exists(args.t5_path)
     t5_model = T5Embedder(
         device=device, 
-        local_cache=True, 
+        local_cache=False,
         cache_dir=args.t5_path, 
         dir_or_name=args.t5_model_type,
         torch_dtype=precision,
@@ -132,19 +143,24 @@ if __name__ == "__main__":
     parser.add_argument("--output", default=None, help="full output image path")
     parser.add_argument("--output-dir", default=DEFAULT_OUT, help="directory used with --filename")
     parser.add_argument("--filename", default="output.png")
-    parser.add_argument("--t5-path", type=str, default='pretrained_models/t5-ckpt')
+    parser.add_argument("--t5-path", type=str, default='pretrained_models/t5-ckpt',
+                        help="cache directory for the DeepFloyd/flan-t5-xl text encoder")
     parser.add_argument("--t5-model-type", type=str, default='flan-t5-xl')
     parser.add_argument("--t5-feature-max-len", type=int, default=120)
     parser.add_argument("--t5-feature-dim", type=int, default=2048)
     parser.add_argument("--no-left-padding", action='store_true', default=False)
     parser.add_argument("--gpt-model", type=str, choices=list(GPT_models.keys()), default="GPT-XL")
-    parser.add_argument("--gpt-ckpt", type=str, default=None)
+    parser.add_argument("--gpt-repo", type=str, default=DEFAULT_HF_REPO)
+    parser.add_argument("--gpt-ckpt", type=str, default=DEFAULT_GPT_CKPT,
+                        help="local GPT checkpoint path or file in --gpt-repo")
     parser.add_argument("--gpt-type", type=str, choices=['c2i', 't2i'], default="t2i", help="class->image or text->image")  
     parser.add_argument("--cls-token-num", type=int, default=120, help="max token number of condition input")
     parser.add_argument("--precision", type=str, default='bf16', choices=["none", "fp16", "bf16"]) 
     parser.add_argument("--compile", action='store_true', default=False)
     parser.add_argument("--vq-model", type=str, choices=list(VQ_models.keys()), default="VQ-16")
-    parser.add_argument("--vq-ckpt", type=str, default=None, help="ckpt path for vq model")
+    parser.add_argument("--vq-repo", type=str, default=DEFAULT_HF_REPO)
+    parser.add_argument("--vq-ckpt", type=str, default=DEFAULT_VQ_CKPT,
+                        help="local VQ checkpoint path or file in --vq-repo")
     parser.add_argument("--codebook-size", type=int, default=16384, help="codebook size for vector quantization")
     parser.add_argument("--codebook-embed-dim", type=int, default=8, help="codebook dimension for vector quantization")
     parser.add_argument("--image-size", type=int, choices=[256, 384, 512], default=512)

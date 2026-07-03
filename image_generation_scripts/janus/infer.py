@@ -16,7 +16,7 @@ if SCRIPT_DIR not in sys.path:
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = "./JANUS-PRO-MODEL"
+DEFAULT_MODEL = "deepseek-ai/Janus-Pro-7B"
 
 
 _TRIANGULAR_BFLOAT16_PATCHED = False

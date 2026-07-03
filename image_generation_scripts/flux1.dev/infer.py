@@ -5,7 +5,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = './FLUX-MODEL'
+DEFAULT_MODEL = 'black-forest-labs/FLUX.1-dev'
 
 
 def configure_torch():

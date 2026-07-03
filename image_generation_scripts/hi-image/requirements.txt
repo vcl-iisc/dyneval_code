@@ -1,0 +1,11 @@
+# Based on the official HiDream-I1 requirements and local hi_diffusers imports.
+git+https://github.com/HiDream-ai/HiDream-I1.git
+git+https://github.com/huggingface/diffusers.git
+torch>=2.5.1
+torchvision>=0.20.1
+transformers>=4.47.1
+accelerate>=1.2.1
+einops>=0.7.0
+safetensors
+pillow
+sentencepiece

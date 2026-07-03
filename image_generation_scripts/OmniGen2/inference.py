@@ -18,6 +18,7 @@ from omnigen2.pipelines.omnigen2.pipeline_omnigen2 import OmniGen2Pipeline
 from omnigen2.models.transformers.transformer_omnigen2 import OmniGen2Transformer2DModel
 
 DEFAULT_OUT = "outputs"
+DEFAULT_MODEL_PATH = "VectorSpaceLab/OmniGen2"
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,8 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model_path",
         type=str,
-        required=True,
-        help="Path to model checkpoint.",
+        default=DEFAULT_MODEL_PATH,
+        help="OmniGen2 Hugging Face repo id or local checkpoint directory.",
     )
     parser.add_argument(
         "--transformer_path",

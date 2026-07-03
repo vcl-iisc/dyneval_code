@@ -6,9 +6,10 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 KOLORS_ROOT = os.path.dirname(SCRIPT_DIR)
 DEFAULT_OUT = "outputs"
+DEFAULT_MODEL = "Kwai-Kolors/Kolors"
 
 
-def load_pipe():
+def load_pipe(model_name_or_path):
     sys.path.insert(0, KOLORS_ROOT)
     os.chdir(KOLORS_ROOT)
 
@@ -20,15 +21,28 @@ def load_pipe():
         StableDiffusionXLPipeline,
     )
 
-    ckpt_dir = os.path.join(KOLORS_ROOT, "weights", "Kolors")
     text_encoder = ChatGLMModel.from_pretrained(
-        f"{ckpt_dir}/text_encoder", torch_dtype=torch.float16
+        model_name_or_path,
+        subfolder="text_encoder",
+        torch_dtype=torch.float16,
     ).half()
-    tokenizer = ChatGLMTokenizer.from_pretrained(f"{ckpt_dir}/text_encoder")
-    vae = AutoencoderKL.from_pretrained(f"{ckpt_dir}/vae", revision=None).half()
-    scheduler = EulerDiscreteScheduler.from_pretrained(f"{ckpt_dir}/scheduler")
+    tokenizer = ChatGLMTokenizer.from_pretrained(
+        model_name_or_path,
+        subfolder="text_encoder",
+    )
+    vae = AutoencoderKL.from_pretrained(
+        model_name_or_path,
+        subfolder="vae",
+        revision=None,
+    ).half()
+    scheduler = EulerDiscreteScheduler.from_pretrained(
+        model_name_or_path,
+        subfolder="scheduler",
+    )
     unet = UNet2DConditionModel.from_pretrained(
-        f"{ckpt_dir}/unet", revision=None
+        model_name_or_path,
+        subfolder="unet",
+        revision=None,
     ).half()
     pipe = StableDiffusionXLPipeline(
         vae=vae,
@@ -64,6 +78,8 @@ def main():
     ap.add_argument("--output", default=None, help="full output image path")
     ap.add_argument("--output_dir", default=DEFAULT_OUT, help="directory used with --filename")
     ap.add_argument("--filename", default="output.png")
+    ap.add_argument("--model_name_or_path", default=DEFAULT_MODEL,
+                    help="Kolors Hugging Face repo id or local weights directory")
     ap.add_argument("--seed", type=int, default=66,
                     help="same default as Kolors scripts/sample.py")
     ap.add_argument("--height", type=int, default=1024)
@@ -77,7 +93,7 @@ def main():
     os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
 
     print("Loading Kolors pipeline (once) ...")
-    pipe = load_pipe()
+    pipe = load_pipe(args.model_name_or_path)
 
     image = generate(
         pipe,

@@ -19,3 +19,5 @@ Common options:
 ```
 
 Use `--model_name_or_path` to override the default model path or Hugging Face id.
+
+Refer to https://github.com/ai-forever/kandinsky-3

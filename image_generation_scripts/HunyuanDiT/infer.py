@@ -1,69 +1,57 @@
+#!/usr/bin/env python3
+"""Generate one HunyuanDiT image from a single prompt."""
+import argparse
 import os
+
 import torch
 from diffusers import HunyuanDiTPipeline
-from tqdm import tqdm
 
-# =====================================================
-# CONFIGURATION
-# =====================================================
-PROMPTS_FILE = "prompts/all_prompts.txt"
-OUTPUT_DIR = "./hunyuandit-evalmuse"
-MODEL_PATH = "Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers"  # Or your local model path
+DEFAULT_OUT = "outputs"
+DEFAULT_MODEL = "Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers"
+DEFAULT_NEGATIVE_PROMPT = "blurry, low quality"
 
-NUM_STEPS = 50
-HEIGHT, WIDTH = 1024, 1024
-GUIDANCE_SCALE = 5.0
-NEGATIVE_PROMPT = "blurry, low quality"
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("prompt", help="text prompt to generate")
+    parser.add_argument("--output", default=None, help="full output image path")
+    parser.add_argument("--output_dir", default=DEFAULT_OUT, help="directory used with --filename")
+    parser.add_argument("--filename", default="output.png")
+    parser.add_argument("--model_name_or_path", default=DEFAULT_MODEL)
+    parser.add_argument("--negative_prompt", default=DEFAULT_NEGATIVE_PROMPT)
+    parser.add_argument("--height", type=int, default=1024)
+    parser.add_argument("--width", type=int, default=1024)
+    parser.add_argument("--num_inference_steps", type=int, default=50)
+    parser.add_argument("--guidance_scale", type=float, default=5.0)
+    parser.add_argument("--dtype", choices=("float16", "bfloat16", "float32"), default="float16")
+    parser.add_argument("--device", default="cuda")
+    args = parser.parse_args()
 
-# =====================================================
-# LOAD MODEL
-# =====================================================
-print("Loading HunyuanDiT model...")
-pipe = HunyuanDiTPipeline.from_pretrained(
-    MODEL_PATH,
-    torch_dtype=torch.float16
-).to("cuda")
-print("Model loaded!")
+    dtype = {
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "float32": torch.float32,
+    }[args.dtype]
+    output = args.output or os.path.join(args.output_dir, args.filename)
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
 
-# =====================================================
-# LOAD PROMPTS
-# =====================================================
-with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
-    all_prompts = [line.strip() for line in f if line.strip()]
+    print(f"Loading HunyuanDiT from {args.model_name_or_path} ...")
+    pipe = HunyuanDiTPipeline.from_pretrained(
+        args.model_name_or_path,
+        torch_dtype=dtype,
+    ).to(args.device)
 
-total_prompts = len(all_prompts)
-if total_prompts == 0:
-    print("⚠️ No prompts found!")
-    exit()
+    result = pipe(
+        prompt=args.prompt,
+        negative_prompt=args.negative_prompt,
+        height=args.height,
+        width=args.width,
+        num_inference_steps=args.num_inference_steps,
+        guidance_scale=args.guidance_scale,
+    )
+    result.images[0].save(output)
+    print(f"Saved {output}")
 
-print(f"📋 Loaded {total_prompts} prompts")
 
-# =====================================================
-# MAIN GENERATION LOOP WITH RESUME SUPPORT
-# =====================================================
-for idx, prompt in enumerate(tqdm(all_prompts, desc="Generating", unit="prompt")):
-    output_filename = f"{idx:05d}.png"
-    output_path = os.path.join(OUTPUT_DIR, output_filename)
-
-    # Skip if already exists (resume support)
-    if os.path.exists(output_path):
-        continue
-
-    try:
-        result = pipe(
-            prompt=prompt,
-            negative_prompt=NEGATIVE_PROMPT,
-            height=HEIGHT,
-            width=WIDTH,
-            num_inference_steps=NUM_STEPS,
-            guidance_scale=GUIDANCE_SCALE,
-        )
-        image = result.images[0]
-        image.save(output_path)
-
-    except Exception as e:
-        tqdm.write(f"❌ Error {output_filename}: {e}")
-
-print("\n🎯 All prompts processed!")
+if __name__ == "__main__":
+    main()

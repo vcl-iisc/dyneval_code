@@ -4,7 +4,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = "./OMNIGEN-MODEL"
+DEFAULT_MODEL = "Shitao/OmniGen-v1"
 RECOMMENDED_TRANSFORMERS = "4.45.2"
 
 

@@ -5,7 +5,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = './Z-IMAGE-MODEL'
+DEFAULT_MODEL = 'Tongyi-MAI/Z-Image'
 
 
 def configure_torch():

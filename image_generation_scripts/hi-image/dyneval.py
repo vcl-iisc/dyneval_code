@@ -5,7 +5,7 @@ import os
 import time
 
 DEFAULT_OUT = "outputs"
-DEFAULT_MODEL = "./HiDream-I1-Full-model"
+DEFAULT_MODEL = "HiDream-ai/HiDream-I1-Full"
 LLAMA_MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 MODEL_CONFIGS = {
