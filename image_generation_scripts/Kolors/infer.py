@@ -4,7 +4,7 @@ import os
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-KOLORS_ROOT = os.path.dirname(SCRIPT_DIR)
+KOLORS_ROOT = SCRIPT_DIR
 DEFAULT_OUT = "outputs"
 DEFAULT_MODEL = "Kwai-Kolors/Kolors"
 

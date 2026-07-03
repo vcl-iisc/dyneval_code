@@ -28,7 +28,7 @@ def _patch_omnigen_phi3_transformer():
 
     if _version_tuple(transformers.__version__) < (4, 46, 0):
         return False
-    if getattr(omnigen_transformer.Phi3Transformer.forward, "_dyneval_patched", False):
+    if getattr(omnigen_transformer.Phi3Transformer.forward, "_single_prompt_patched", False):
         return True
 
     def forward(
@@ -167,7 +167,7 @@ def _patch_omnigen_phi3_transformer():
             attentions=all_self_attns,
         )
 
-    forward._dyneval_patched = True
+    forward._single_prompt_patched = True
     omnigen_transformer.Phi3Transformer.forward = forward
     return True
 

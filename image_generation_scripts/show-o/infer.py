@@ -14,7 +14,7 @@ from utils import get_config, denorm, get_hyper_params, path_to_llm_name, load_s
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SHOWO_DIR = os.path.dirname(SCRIPT_DIR)
-PROJECT_ROOT = "/mnt/18_TB/shyam/dyneval_project"
+CODEBASE_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 DEFAULT_VAE_PATH = os.path.join(SCRIPT_DIR, "Wan2.1_VAE.pth")
 DEFAULT_OUT = "outputs"
 
@@ -24,7 +24,7 @@ def _find_existing_file(path):
         return None
     if os.path.isfile(path):
         return os.path.abspath(path)
-    for root in (SCRIPT_DIR, SHOWO_DIR, PROJECT_ROOT, os.getcwd()):
+    for root in (SCRIPT_DIR, SHOWO_DIR, CODEBASE_ROOT, os.getcwd()):
         resolved = os.path.join(root, path)
         if os.path.isfile(resolved):
             return os.path.abspath(resolved)
@@ -49,7 +49,7 @@ def resolve_vae_model_path(config):
 
     raise FileNotFoundError(
         "Wan VAE weights were not found. Download with:\n"
-        "  cd /mnt/18_TB/shyam/dyneval_project/show-o/show-o2\n"
+        f"  cd {SCRIPT_DIR}\n"
         "  wget https://huggingface.co/Wan-AI/Wan2.1-T2V-14B/resolve/main/Wan2.1_VAE.pth\n"
         f"Expected file at {DEFAULT_VAE_PATH}"
     )
@@ -336,7 +336,7 @@ if __name__ == "__main__":
         prompt = config.get("prompt")
     if not prompt:
         raise SystemExit(
-            'Missing prompt. Example: python inference_t2i.py "a red chair" config=configs/example.yaml'
+            'Missing prompt. Example: python infer.py "a red chair" config=configs/example.yaml'
         )
 
     if config.get("seed") is not None:

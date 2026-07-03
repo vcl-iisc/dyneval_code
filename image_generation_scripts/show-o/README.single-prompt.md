@@ -1,6 +1,6 @@
 # Show-O single-prompt generation
 
-This folder contains a one-prompt image generation entry point for `inference_t2i.py`. Run commands from this folder unless noted otherwise.
+This folder contains a one-prompt image generation entry point for `infer.py`. Run commands from this folder unless noted otherwise.
 
 ## Setup
 
@@ -17,13 +17,13 @@ API-backed folders use their provider API key instead of Hugging Face login; see
 ## Generate One Image
 
 ```bash
-python inference_t2i.py "a cinematic photo of a red chair beside a window" config=configs/showo2_1.5b_demo_512x512.yaml
+python infer.py "a cinematic photo of a red chair beside a window" config=configs/showo2_1.5b_demo_512x512.yaml
 ```
 
 The default output is `outputs/output.png` unless this README shows a different file extension. To choose the exact output path:
 
 ```bash
-python inference_t2i.py "a cinematic photo of a red chair beside a window" config=configs/showo2_1.5b_demo_512x512.yaml --output ./outputs/red-chair.png
+python infer.py "a cinematic photo of a red chair beside a window" config=configs/showo2_1.5b_demo_512x512.yaml --output ./outputs/red-chair.png
 ```
 
 You can also keep the default output directory and change only the filename with `--filename` when the script supports it.

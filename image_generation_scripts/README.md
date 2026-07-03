@@ -29,7 +29,7 @@ Most converted scripts follow this shape:
 python infer.py "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.png
 ```
 
-Some folders use a different script name, for example `dyneval.py`, `image-gen.py`, or `inference.py`. Use the command shown in the folder README.
+Every top-level model folder now uses `infer.py` as the image generation entry point. Use the folder README for model-specific flags.
 
 ## Outputs
 
@@ -56,29 +56,29 @@ API-backed folders do not use Hugging Face login:
 
 | Folder | README | Entry point | Default model/source |
 | --- | --- | --- | --- |
-| `Bagel` | `README.md` | `scripts/infer-image-gen.py` | `ByteDance-Seed/BAGEL-7B-MoT` |
+| `Bagel` | `README.md` | `infer.py` | `ByteDance-Seed/BAGEL-7B-MoT` |
 | `FIBO` | `README.md` | `infer.py` | `briaai/FIBO` |
 | `GLM-Image` | `README.md` | `infer.py` | `zai-org/GLM-Image` |
 | `GPT-Image` | `README.md` | `infer.py` | `gpt-image-1.5` |
 | `HunyuanDiT` | `README.md` | `infer.py` | `Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers` |
 | `IF-XL` | `README.md` | `infer.py` | `DeepFloyd/IF-I-XL-v1.0` |
-| `Kolors` | `README.md` | `scripts/image-gen.py` | `Kwai-Kolors/Kolors` |
-| `OmniGen2` | `README.single-prompt.md` | `inference.py` | `VectorSpaceLab/OmniGen2` |
-| `UniPic-1` | `README.single-prompt.md` | `scripts/infer.py` | `Skywork/Skywork-UniPic-1.5B` |
-| `UniWorld-V1` | `README.single-prompt.md` | `univa/serve/infer.py` | `PKU-YuanGroup/UniWorld-V1` |
+| `Kolors` | `README.md` | `infer.py` | `Kwai-Kolors/Kolors` |
+| `OmniGen2` | `README.single-prompt.md` | `infer.py` | `VectorSpaceLab/OmniGen2` |
+| `UniPic-1` | `README.single-prompt.md` | `infer.py` | `Skywork/Skywork-UniPic-1.5B` |
+| `UniWorld-V1` | `README.single-prompt.md` | `infer.py` | `PKU-YuanGroup/UniWorld-V1` |
 | `X-Omni` | `README.md` | `infer.py` | `X-Omni/X-Omni-En` plus `black-forest-labs/FLUX.1-dev` |
-| `emu3` | `README.md` | `image-gen.py` | `BAAI/Emu3-Gen` |
+| `emu3` | `README.md` | `infer.py` | `BAAI/Emu3-Gen` |
 | `flux1.dev` | `README.md` | `infer.py` | `black-forest-labs/FLUX.1-dev` |
-| `flux2.dev` | `README.md` | `dyneval.py` | `black-forest-labs/FLUX.2-dev` |
-| `flux2.klein` | `README.md` | `dyneval.py` | `black-forest-labs/FLUX.2-klein-9B` |
-| `hi-image` | `README.md` | `dyneval.py` | `HiDream-ai/HiDream-I1-Full` |
+| `flux2.dev` | `README.md` | `infer.py` | `black-forest-labs/FLUX.2-dev` |
+| `flux2.klein` | `README.md` | `infer.py` | `black-forest-labs/FLUX.2-klein-9B` |
+| `hi-image` | `README.md` | `infer.py` | `HiDream-ai/HiDream-I1-Full` |
 | `incontext-llora` | `README.md` | `infer.py` | `black-forest-labs/FLUX.1-dev` plus `ali-vilab/In-Context-LoRA` |
 | `janus` | `README.md` | `infer.py` | `deepseek-ai/Janus-Pro-7B` |
 | `kandinsky3` | `README.md` | `infer.py` | see folder README |
-| `llamagen` | `README.single-prompt.md` | `autoregressive/sample/image-gen.py` | `FoundationVision/LlamaGen` |
+| `llamagen` | `README.single-prompt.md` | `infer.py` | `FoundationVision/LlamaGen` |
 | `longcat` | `README.md` | `infer.py` | `meituan-longcat/LongCat-Image` |
 | `nanobanana` | `README.md` | `infer.py` | `gemini-3.1-flash-image-preview` |
-| `omnigen` | `README.md` | `image-infer.py` | `Shitao/OmniGen-v1` |
+| `omnigen` | `README.md` | `infer.py` | `Shitao/OmniGen-v1` |
 | `pixart-alpha` | `README.md` | `infer.py` | `PixArt-alpha/PixArt-Sigma-XL-2-1024-MS` |
 | `pixart-sigma` | `README.md` | `infer.py` | `PixArt-alpha/PixArt-Sigma-XL-2-1024-MS` |
 | `playground` | `README.md` | `infer.py` | `playgroundai/playground-v2.5-1024px-aesthetic` |
@@ -89,7 +89,7 @@ API-backed folders do not use Hugging Face login:
 | `sdv2.1` | `README.md` | `infer.py` | `sd2-community/stable-diffusion-2-1` |
 | `sdxl` | `README.md` | `infer.py` | `stabilityai/stable-diffusion-xl-base-1.0` |
 | `sdxl-turbo` | `README.md` | `infer.py` | `stabilityai/sdxl-turbo` |
-| `show-o` | `README.single-prompt.md` | `inference_t2i.py` | official Show-O config/checkpoints |
+| `show-o` | `README.single-prompt.md` | `infer.py` | official Show-O config/checkpoints |
 | `ssd1b` | `README.md` | `infer.py` | `segmind/SSD-1B` |
 | `z-image` | `README.md` | `infer.py` | `Tongyi-MAI/Z-Image` |
 

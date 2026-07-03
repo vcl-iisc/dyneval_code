@@ -10,10 +10,7 @@ from transformers import AutoProcessor, set_seed
 from transformers import SiglipImageProcessor, SiglipVisionModel
 
 # Repo root (UniWorld-V1/) must be on sys.path for `import univa`.
-# `sys.path.append("..")` only works when cwd is univa/serve/; use the file
-# location instead so both `python -m univa.serve.cli` and
-# `python univa/serve/cli.py` work from the repo root.
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 

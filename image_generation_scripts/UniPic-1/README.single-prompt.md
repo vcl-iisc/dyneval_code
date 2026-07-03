@@ -1,6 +1,6 @@
 # UniPic-1 single-prompt generation
 
-This folder contains a one-prompt image generation entry point for `scripts/infer.py`. Run commands from this folder unless noted otherwise.
+This folder contains a one-prompt image generation entry point for `infer.py`. Run commands from this folder unless noted otherwise.
 
 ## Setup
 
@@ -22,13 +22,13 @@ API-backed folders use their provider API key instead of Hugging Face login; see
 ## Generate One Image
 
 ```bash
-python scripts/infer.py configs/unipic_1.5b.yaml "a cinematic photo of a red chair beside a window"
+python infer.py configs/unipic_1.5b.yaml "a cinematic photo of a red chair beside a window"
 ```
 
 The default output is `outputs/output.png` unless this README shows a different file extension. To choose the exact output path:
 
 ```bash
-python scripts/infer.py configs/unipic_1.5b.yaml "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.jpg
+python infer.py configs/unipic_1.5b.yaml "a cinematic photo of a red chair beside a window" --output ./outputs/red-chair.jpg
 ```
 
 You can also keep the default output directory and change only the filename with `--filename` when the script supports it.
