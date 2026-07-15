@@ -6,6 +6,31 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
 
 ---
 
+## Table of Contents
+
+- [Main Contributions](#main-contributions)
+- [How to Run](#how-to-run)
+  - [Step 1 — Filter Diverse Prompts](#step-1--filter-diverse-prompts)
+  - [Step 2 — Generate Images](#step-2--generate-images)
+  - [Step 3 — Distill Annotations with a Teacher VLM](#step-3--distill-annotations-with-a-teacher-vlm)
+  - [Step 4 — Fine-tune DynEval](#step-4--fine-tune-dyneval)
+    - [4a — Configure Dataset Paths](#4a--configure-dataset-paths)
+    - [4b — Annotation Format](#4b--annotation-format)
+    - [4c — Run Fine-tuning](#4c--run-fine-tuning)
+- [Quantitative Results](#quantitative-results)
+- [Qualitative Results](#qualitative-results)
+- [Inference](#inference)
+  - [Install Dependencies](#install-dependencies)
+  - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
+  - [Run DynEval-4B from Hugging Face](#run-dyneval-4b-from-hugging-face)
+  - [Run a Local Checkpoint](#run-a-local-checkpoint)
+  - [Example Terminal Output](#example-terminal-output)
+  - [Optional Debug Fields](#optional-debug-fields)
+  - [Command-Line Arguments](#command-line-arguments)
+  - [Notes](#notes)
+
+---
+
 ## Main Contributions
 
 **(i)** We construct two large-scale datasets, GenDB and DynEvalInstruct with well-balanced prompt coverage and image generations from 36 diverse T2I models for evaluator training. We construct GenDB, a large-scale prompt–image dataset with well-balanced prompt coverage and generations from 36 diverse T2I models, and derive DynEvalInstruct from GenDB for evaluator training.
