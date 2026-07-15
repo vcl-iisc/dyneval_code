@@ -9,7 +9,7 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
 ## Table of Contents
 
 - [Main Contributions](#main-contributions)
-- [How to Run](#how-to-run)
+- [Dataset Construction and Training](#dataset-construction-and-training)
   - [Step 1 — Filter Diverse Prompts](#step-1--filter-diverse-prompts)
   - [Step 2 — Generate Images](#step-2--generate-images)
   - [Step 3 — Distill Annotations with a Teacher VLM](#step-3--distill-annotations-with-a-teacher-vlm)
@@ -55,7 +55,7 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
 
 ---
 
-## How to Run
+## Dataset Construction and Training
 
 ### Step 1 — Filter Diverse Prompts
 
