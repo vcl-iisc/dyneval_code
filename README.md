@@ -265,44 +265,134 @@ Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://hu
 
 ## Inference
 
-### Load the 2B Evaluator
+This repository includes `run_inference.py` for normal single-image inference. It can load either:
 
-```python
-import torch
-from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+- a DynEval-2B or DynEval-4B checkpoint from [`vcl-iisc/DynEval-Evaluator`](https://huggingface.co/vcl-iisc/DynEval-Evaluator), or
+- local checkpoint weights from a path on disk.
 
-repo_id = "vcl-iisc/DynEval-Evaluator"
+The script runs the complete alignment-evaluation flow:
 
-model = Qwen3VLForConditionalGeneration.from_pretrained(
-    repo_id,
-    subfolder="DynEval-2B",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
+1. Extract text-to-image elements internally with `<|T2IA|>`.
+2. Generate one yes/no visual question for each element with `<|T2IA|>`.
+3. Score the image against the generated questions with `<|EVALUATION|>`.
 
-processor = AutoProcessor.from_pretrained(
-    repo_id,
-    subfolder="DynEval-2B",
-)
+By default, the terminal displays only the generated questions and final scores. Intermediate elements and raw model responses are hidden unless explicitly requested.
+
+### Install Dependencies
+
+Use an environment with a recent Qwen3-VL-compatible version of `transformers`:
+
+```bash
+pip install torch transformers accelerate pillow
 ```
 
-### Load the 4B Evaluator
+If the Hugging Face model requires access approval, accept it on the [model page](https://huggingface.co/vcl-iisc/DynEval-Evaluator) and then log in:
 
-```python
-import torch
-from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
-
-repo_id = "vcl-iisc/DynEval-Evaluator"
-
-model = Qwen3VLForConditionalGeneration.from_pretrained(
-    repo_id,
-    subfolder="DynEval-4B",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
-
-processor = AutoProcessor.from_pretrained(
-    repo_id,
-    subfolder="DynEval-4B",
-)
+```bash
+huggingface-cli login
 ```
+
+Run the following commands from the repository root (the directory containing `run_inference.py`).
+
+### Run DynEval-2B from Hugging Face
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --variant 2b \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output.json
+```
+
+### Run DynEval-4B from Hugging Face
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --variant 4b \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output.json
+```
+
+### Run a Local Checkpoint
+
+Use `--checkpoint` when the weights are already downloaded locally:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --checkpoint /path/to/local/checkpoint \
+  --prompt "a photo of a carrot" \
+  --image /path/to/image.jpg \
+  --output-file output.json
+```
+
+`--checkpoint` overrides both `--variant` and `--repo-id`.
+
+### Example Terminal Output
+
+```text
+========================================================================================
+DynEval Evaluator Result
+========================================================================================
+Prompt: a photo of a carrot
+Image: example.jpg
+
+Questions (1)
+  1. Is there a carrot in the photo?
+     ground-truth answer: yes
+
+Evaluation Scores (1)
+  1. score=5 | Is there a carrot in the photo?
+  Mean score: 5.000
+========================================================================================
+```
+
+When `--output-file` is provided, the script also saves JSON with the following structure:
+
+```json
+{
+  "prompt": "...",
+  "image_path": "...",
+  "questions": [],
+  "answers": []
+}
+```
+
+### Optional Debug Fields
+
+Use `--include-elements` to add the intermediate extracted elements to the saved JSON, and `--include-raw` to add the raw model responses:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --variant 2b \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output_debug.json \
+  --include-elements \
+  --include-raw
+```
+
+These flags affect the saved JSON only; the terminal output remains concise.
+
+### Command-Line Arguments
+
+- `--variant {2b,4b}`: Hugging Face model variant; defaults to `2b`.
+- `--checkpoint PATH`: local checkpoint to load instead of Hugging Face weights.
+- `--repo-id REPO_ID`: Hugging Face repository; defaults to `vcl-iisc/DynEval-Evaluator`.
+- `--prompt TEXT`: text-to-image prompt corresponding to the image (required).
+- `--image PATH`: image to evaluate (required).
+- `--output-file PATH`: optional path at which to save the JSON result.
+- `--dtype {bfloat16,float16,float32,auto}`: model precision; defaults to `bfloat16`.
+- `--device-map DEVICE_MAP`: model device placement; defaults to `auto`.
+- `--max-new-tokens-elements N`: element-extraction generation limit; defaults to `256`.
+- `--max-new-tokens-questions N`: per-question generation limit; defaults to `256`.
+- `--max-new-tokens-answers N`: evaluation generation limit; defaults to `768`.
+- `--include-elements`: include extracted elements in the saved JSON.
+- `--include-raw`: include raw model responses in the saved JSON.
+
+### Notes
+
+- For the best reproducibility, use the exact text prompt associated with the evaluated image.
+- The script adds the DynEval task tokens internally; do not add `<|T2IA|>` or `<|EVALUATION|>` to `--prompt`.
+- The Hugging Face repository stores the variants in the `DynEval-2B` and `DynEval-4B` subfolders.
+- `--output-file` is optional. The formatted result is always printed to the terminal.
