@@ -1,0 +1,5 @@
+{
+    "description": "Minimal placeholder manifest. Replace this folder with generated SFT data before training.",
+    "expected_files": ["train.jsonl", "val.jsonl", "manifest.json"]
+  }
+  

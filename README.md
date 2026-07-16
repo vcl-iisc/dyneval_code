@@ -219,7 +219,7 @@ Do not put task tokens in assistant responses.
 
 #### 4c — Build SFT Data
 
-Use `data_building/build_dyneval_sft.py` to convert teacher-generated question/answer files into SFT JSONL.
+Use `data/build_dyneval_sft.py` to convert teacher-generated question/answer files into SFT JSONL.
 
 Expected inputs:
 
@@ -230,7 +230,7 @@ Expected inputs:
 Example:
 
 ```bash
-python data_building/build_dyneval_sft.py \
+python data/build_dyneval_sft.py \
   --questions-dir /path/to/questions \
   --answers-dir /path/to/answers \
   --images-root /path/to/images \
@@ -253,17 +253,6 @@ The generated SFT data can include rows for:
 - `<T2IA>` single-question generation
 - `<IQA>` image-quality question generation
 - `<EVALUATION>` image scoring
-
-To combine multiple prepared SFT folders:
-
-```bash
-python data_building/combine_sft_dirs.py \
-  --input-dirs \
-    data/sft/dataset_a \
-    data/sft/dataset_b \
-    data/sft/dataset_c \
-  --output-dir data/sft/combined_dyneval_sft_data
-```
 
 #### 4d — Run Training
 
@@ -398,6 +387,7 @@ When `--output-file` is provided, the script also saves JSON with the following 
 {
   "prompt": "...",
   "image_path": "...",
+  "elements": [],
   "questions": [],
   "answers": []
 }
@@ -405,7 +395,7 @@ When `--output-file` is provided, the script also saves JSON with the following 
 
 ### Optional Debug Fields
 
-Use `--include-elements` to add the intermediate extracted elements to the saved JSON, and `--include-raw` to add the raw model responses:
+Use `--include-raw` to save raw model responses. Use `--hide-elements` if you do not want intermediate elements in the terminal or saved JSON.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python run_inference.py \
@@ -413,11 +403,8 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
   --prompt "a photo of a carrot" \
   --image example.jpg \
   --output-file output_debug.json \
-  --include-elements \
   --include-raw
 ```
-
-These flags affect the saved JSON only; the terminal output remains concise.
 
 ### Command-Line Arguments
 
@@ -431,6 +418,7 @@ These flags affect the saved JSON only; the terminal output remains concise.
 - `--max-new-tokens-elements N`: element-extraction generation limit; defaults to `256`.
 - `--max-new-tokens-questions N`: per-question generation limit; defaults to `256`.
 - `--max-new-tokens-answers N`: evaluation generation limit; defaults to `768`.
+- `--hide-elements`: hide extracted elements from the terminal and saved JSON.
 - `--include-raw`: include raw model responses in the saved JSON.
 
 ### Notes
