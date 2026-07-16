@@ -379,12 +379,7 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
 - `--hide-elements`: hide extracted elements from the terminal and saved JSON.
 - `--include-raw`: include raw model responses in the saved JSON.
 
-### Notes
 
-- For the best reproducibility, use the exact text prompt associated with the evaluated image.
-- The script adds the DynEval task tokens internally; do not add `<|T2IA|>` or `<|EVALUATION|>` to `--prompt`.
-- The Hugging Face repository stores the variants in the `DynEval-2B` and `DynEval-4B` subfolders.
-- `--output-file` is optional. The formatted result is always printed to the terminal.
 
 ## Quantitative Results
 
