@@ -1,6 +1,6 @@
 # DynEval: Holistic Evaluation of Text-to-Image Generative Models in the Wild (ECCV-26)
 
-Shyam Marjit*, Dheeraj Baiju*, Anuj Shikarkhane*, Akhil Sakthieswaran, Sayak Paul, and Anirban Chakraborty
+Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, and Anirban Chakraborty
 
 **Model Checkpoints:** [**DynEval-2B** & **DynEval-4B**](https://huggingface.co/vcl-iisc/DynEval-Evaluator) · **Dataset:** [**DynEval-1K**, **GenDB**, **DynEvalInstruct**](https://huggingface.co/datasets/vcl-iisc/DynEval-dataset) *(with teacher model responses)*
 
@@ -13,11 +13,11 @@ Shyam Marjit*, Dheeraj Baiju*, Anuj Shikarkhane*, Akhil Sakthieswaran, Sayak Pau
   - [Step 1 — Filter Diverse Prompts](#step-1--filter-diverse-prompts)
   - [Step 2 — Generate Images](#step-2--generate-images)
   - [Step 3 — Distill Annotations with a Teacher VLM](#step-3--distill-annotations-with-a-teacher-vlm)
-  - [Step 4 — Fine-tune DynEval](#step-4--fine-tune-dyneval)
+  - [Step 4 — Training](#step-4--training)
     - [4a — Task Tokens](#4a--task-tokens)
     - [4b — SFT Annotation Format](#4b--sft-annotation-format)
     - [4c — Build SFT Data](#4c--build-sft-data)
-    - [4d — Run Full Fine-tuning](#4d--run-full-fine-tuning)
+    - [4d — Run Training](#4d--run-training)
     - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
 - [Inference](#inference)
   - [Install Dependencies](#install-dependencies)
@@ -93,24 +93,22 @@ The teacher model uses natural-language prompts only. The student DynEval model 
 
 ---
 
-### Step 4 — Fine-tune DynEval
+### Step 4 — Training
 
-Fine-tune `Qwen/Qwen3-VL-4B-Instruct` (DynEval-4B) or `Qwen/Qwen3-VL-2B-Instruct` (DynEval-2B) using the training script in this repository:
+Train DynEval-2B or DynEval-4B with:
 
 ```text
 training/train_qwen3vl_dyneval.py
 ```
 
-This code does **not** use the older `Qwen3-VL/qwen-vl-finetune/qwenvl/data/__init__.py` dataset-registration flow. You do not need to set `DYNEVALINSTRUCT_T2IA_ANNOTATION`, `DYNEVALINSTRUCT_T2IA_DATA`, `DYNEVALINSTRUCT_IQA_ANNOTATION`, or `DYNEVALINSTRUCT_IQA_DATA`.
-
-Instead, training uses prebuilt SFT JSONL files:
+The trainer expects a prepared SFT data directory:
 
 ```text
 data/sft/<dataset_name>/train.jsonl
 data/sft/<dataset_name>/val.jsonl
 ```
 
-Each JSONL row already contains the full chat messages for one task. The trainer only needs:
+Pass this directory with:
 
 ```bash
 --data-dir data/sft/<dataset_name>
@@ -118,19 +116,13 @@ Each JSONL row already contains the full chat messages for one task. The trainer
 
 #### 4a — Task Tokens
 
-The training script registers the task tokens at startup:
+The tokenizer is initialized with three task tokens:
 
-| Token | Role |
-|-------|------|
-| `<T2IA>` | Prompt-only text-to-image alignment element extraction and question generation |
-| `<IQA>` | Image-quality assessment question generation, including scene/quality checks |
-| `<EVALUATION>` | Image-based question answering and 1--5 scoring |
-
-Training uses:
-
-- `<T2IA>` for text-to-image alignment element extraction and visual question generation.
-- `<IQA>` for image-quality assessment question generation, including scene/quality checks.
-- `<EVALUATION>` for image-based answering and 1--5 scoring of generated questions.
+| Token | Used for |
+|-------|----------|
+| `<T2IA>` | Text-to-image alignment elements and questions |
+| `<IQA>` | Image-quality assessment questions |
+| `<EVALUATION>` | Image-based scoring from 1 to 5 |
 
 #### 4b — SFT Annotation Format
 
@@ -231,9 +223,9 @@ python data_building/combine_sft_dirs.py \
   --output-dir data/sft/combined_dyneval_sft_data
 ```
 
-#### 4d — Run Full Fine-tuning
+#### 4d — Run Training
 
-Always pass `--finetune-mode full` for the full fine-tuning runs reported for DynEval.
+Use `--finetune-mode full` for full-parameter training.
 
 **DynEval-2B:**
 
