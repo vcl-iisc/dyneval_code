@@ -338,7 +338,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run DynEval Evaluator inference from local or Hugging Face weights.")
     parser.add_argument("--checkpoint", type=str, default=None, help="Local checkpoint path. If set, this overrides --variant/--repo-id.")
     parser.add_argument("--repo-id", type=str, default=HF_REPO_ID, help="Hugging Face repo id used when --checkpoint is not set.")
-    parser.add_argument("--variant", choices=["2b", "4b"], default="2b", help="HF model variant to load from the repo.")
+    parser.add_argument("--variant", choices=["2b", "4b"], default="4b", help="HF model variant to load from the repo.")
     parser.add_argument("--prompt", type=str, required=True, help="Text-to-image prompt for the image.")
     parser.add_argument("--image", type=Path, required=True, help="Image path to evaluate.")
     parser.add_argument("--output-file", type=Path, default=None, help="Optional JSON output path.")
