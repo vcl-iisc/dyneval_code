@@ -1,4 +1,14 @@
+#!/usr/bin/env python3
+"""Train Qwen3-VL on DynEval-style SFT JSONL data.
 
+Normal usage is:
+  1. Build data/sft/<dataset_name>/train.jsonl and val.jsonl.
+  2. Run this script with --train-only --data-dir data/sft/<dataset_name>.
+
+The script can also prepare SFT JSONL from a source JSON for simple experiments,
+but public/reproducible runs should prefer the explicit data-building script in
+data/build_dyneval_sft.py.
+"""
 
 
 from __future__ import annotations
@@ -20,15 +30,15 @@ T2IA_TOKEN = "<T2IA>"
 EVALUATION_TOKEN = "<EVALUATION>"
 
 DEFAULT_MODEL = Path("checkpoints/base/QWEN3-VL-4B-INSTRUCT-MODEL")
-DEFAULT_SOURCE_JSON = Path("/mnt/18_TB/shyam/dyneval_project/shyam_eccv/train_list_questions_avg5.json")
-DEFAULT_IMAGE_ROOT = Path("/mnt/18_TB/shyam/dyneval_project/shyam_eccv/dataset/images")
-DEFAULT_DATA_DIR = Path("data/sft/qwen3vl_t2ia_sft_data")
+DEFAULT_SOURCE_JSON = None
+DEFAULT_IMAGE_ROOT = Path("data/images")
+DEFAULT_DATA_DIR = Path("data/sft/example_dyneval_sft_data")
 DEFAULT_QUESTION_DATA_DIR = Path("data/sft/qwen3vl_t2ia_question_sft_data")
 DEFAULT_SINGLE_QUESTION_DATA_DIR = Path("data/sft/qwen3vl_t2ia_single_question_sft_data")
 DEFAULT_MIXED_DATA_DIR = Path("data/sft/qwen3vl_t2ia_mixed_sft_data")
 DEFAULT_EVALUATION_DATA_DIR = Path("data/sft/qwen3vl_evaluation_sft_data")
-DEFAULT_OUTPUT_DIR = Path("qwen3vl-t2ia-lora")
-DEFAULT_FULL_OUTPUT_DIR = Path("qwen3vl-t2ia-full")
+DEFAULT_OUTPUT_DIR = Path("checkpoints/final/dyneval-qwen3vl")
+DEFAULT_FULL_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 
 T2IA_ELEMENT_SYSTEM = """Given an aigc prompt, extract the elements that are important for generating images.
 Classify each element into a type (object, human, animal, food, activity, attribute, counting, color, material, spatial, location, shape, other).
@@ -82,6 +92,7 @@ Questions to score:
 
 
 def require_training_deps():
+    """Import optional training dependencies only when training/preparing data."""
     try:
         from peft import LoraConfig, get_peft_model
         from transformers import AutoProcessor, Qwen3VLForConditionalGeneration, Trainer, TrainingArguments
@@ -95,14 +106,17 @@ def require_training_deps():
 
 
 def distributed_env() -> tuple[int, int]:
+    """Return DDP world size/local rank from torchrun environment variables."""
     return int(os.environ.get("WORLD_SIZE", "1")), int(os.environ.get("LOCAL_RANK", "-1"))
 
 
 def json_dumps(value) -> str:
+    """Serialize assistant targets in a stable, readable JSON format."""
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
 def build_t2ia_element_messages(prompt: str, elements: list[str]) -> list[dict]:
+    """Build one prompt-only <T2IA> element-extraction training conversation."""
     return [
         {
             "role": "system",
@@ -117,6 +131,7 @@ def build_t2ia_element_messages(prompt: str, elements: list[str]) -> list[dict]:
 
 
 def build_t2ia_question_messages(prompt: str, elements: list[str], questions: list[dict]) -> list[dict]:
+    """Build one <T2IA> conversation that maps prompt+elements to questions."""
     return [
         {
             "role": "system",
@@ -139,6 +154,7 @@ def build_t2ia_question_messages(prompt: str, elements: list[str], questions: li
 
 
 def build_t2ia_single_question_messages(prompt: str, element: str, question: str) -> list[dict]:
+    """Build one <T2IA> conversation for a single element/question pair."""
     answer = "no" if element.strip().lower().startswith(("0 ", "zero ", "no ")) else "yes"
     target = {"question": question, "answer": answer}
     return [
@@ -160,6 +176,7 @@ def build_t2ia_single_question_messages(prompt: str, element: str, question: str
 
 
 def rubric_score(raw_score) -> int:
+    """Map source scores to the 1-5 evaluator rubric used by <EVALUATION>."""
     score = float(raw_score)
     if score <= 0.5:
         return 1
@@ -167,6 +184,7 @@ def rubric_score(raw_score) -> int:
 
 
 def build_evaluation_messages(questions: list[str], answers: list[dict]) -> list[dict]:
+    """Build one image-based <EVALUATION> scoring training conversation."""
     questions_text = "\n".join(f"{idx + 1}. Question: {question}" for idx, question in enumerate(questions))
     return [
         {
@@ -185,6 +203,7 @@ def build_evaluation_messages(questions: list[str], answers: list[dict]) -> list
 
 
 def resolve_image_path(image_ref: str, image_root: Path) -> Path | None:
+    """Resolve relative/absolute image references against an image root."""
     ref = Path(image_ref)
     candidates = [ref] if ref.is_absolute() else []
     candidates.extend([image_root / ref, image_root / ref.name])
@@ -201,6 +220,7 @@ def split_and_write_rows(
     seed: int,
     manifest: dict,
 ) -> dict:
+    """Shuffle rows, create train/val JSONL files, and write a manifest."""
     if not rows:
         raise ValueError("No <T2IA> rows were built. Check the source JSON schema.")
 
@@ -229,6 +249,7 @@ def split_and_write_rows(
 
 
 def build_element_rows(records: list[dict], limit: int | None = None) -> tuple[list[dict], int]:
+    """Create <T2IA> element-extraction rows from source records."""
     deduped: dict[tuple[str, str, tuple[str, ...]], dict] = {}
     skipped = 0
     for record in records:
@@ -257,6 +278,7 @@ def build_element_rows(records: list[dict], limit: int | None = None) -> tuple[l
 
 
 def build_question_rows(records: list[dict], limit: int | None = None) -> tuple[list[dict], int]:
+    """Create multi-question <T2IA> rows from records with element_score keys."""
     deduped: dict[tuple[str, str, tuple[str, ...], tuple[str, ...]], dict] = {}
     skipped = 0
     for record in records:
@@ -302,6 +324,7 @@ def build_question_rows(records: list[dict], limit: int | None = None) -> tuple[
 
 
 def build_single_question_rows(records: list[dict], limit: int | None = None) -> tuple[list[dict], int]:
+    """Create one <T2IA> question-generation row per element/question."""
     deduped: dict[tuple[str, str, str, str], dict] = {}
     skipped = 0
     for record in records:
@@ -346,6 +369,7 @@ def build_single_question_rows(records: list[dict], limit: int | None = None) ->
 
 
 def build_evaluation_rows(records: list[dict], image_root: Path, limit: int | None = None) -> tuple[list[dict], int]:
+    """Create image-based <EVALUATION> rows from records with scores."""
     rows: list[dict] = []
     skipped = 0
     for record in records:
@@ -406,6 +430,7 @@ def prepare_t2ia_sft(
     t2ia_task: str = "element_extraction",
     image_root: Path = DEFAULT_IMAGE_ROOT,
 ) -> dict:
+    """Prepare legacy/source-JSON SFT data; most users should pass --data-dir."""
     records = json.loads(source_json.read_text(encoding="utf-8"))
     if not isinstance(records, list):
         raise ValueError(f"{source_json} must contain a JSON array")
@@ -448,6 +473,8 @@ def prepare_t2ia_sft(
 
 
 class JsonlConversationDataset(Dataset):
+    """Tiny JSONL dataset wrapper used by Hugging Face Trainer."""
+
     def __init__(self, path: Path, max_samples: int | None = None):
         self.rows = []
         with path.open("r", encoding="utf-8") as handle:
@@ -465,12 +492,14 @@ class JsonlConversationDataset(Dataset):
 
 
 def tensor_without_batch_dim(key: str, value):
+    """Remove processor batch dimension from tensors before custom padding."""
     if key in {"input_ids", "attention_mask", "assistant_masks", "mm_token_type_ids"}:
         return value.squeeze(0)
     return value
 
 
 def mask_assistant_spans(input_ids: torch.Tensor, messages: list[dict], tokenizer) -> torch.Tensor:
+    """Find assistant answer spans so loss is only applied to target text."""
     labels_mask = torch.zeros_like(input_ids, dtype=torch.bool)
     cursor = 0
     for message in messages:
@@ -494,11 +523,13 @@ def mask_assistant_spans(input_ids: torch.Tensor, messages: list[dict], tokenize
 
 @dataclass
 class TextConversationCollator:
+    """Tokenize text/image conversations and build labels for SFT."""
     processor: object
     max_length: int
     train_all_tokens_if_no_mask: bool = False
 
     def __call__(self, features: list[dict]) -> dict[str, torch.Tensor]:
+        # Text-only rows use apply_chat_template; image rows use processor(text, images).
         batch_inputs = []
         for row in features:
             if row.get("image_path"):
@@ -587,6 +618,7 @@ class TextConversationCollator:
 
 
 def register_task_tokens(processor, model) -> int:
+    """Register DynEval task tokens and resize embeddings when needed."""
     tokenizer = processor.tokenizer
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -603,12 +635,14 @@ def register_task_tokens(processor, model) -> int:
 
 
 def count_trainable_parameters(model) -> tuple[int, int]:
+    """Return trainable and total parameter counts for logging."""
     trainable = sum(param.numel() for param in model.parameters() if param.requires_grad)
     total = sum(param.numel() for param in model.parameters())
     return trainable, total
 
 
 def train_t2ia(args: argparse.Namespace) -> None:
+    """Load model/data, configure full or LoRA tuning, and run Trainer."""
     AutoProcessor, Qwen3VLForConditionalGeneration, Trainer, TrainingArguments, LoraConfig, get_peft_model = (
         require_training_deps()
     )
@@ -698,10 +732,16 @@ def train_t2ia(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Prepare and fine-tune Qwen3-VL-4B for DynEVAL task tokens.")
+    """Create CLI arguments for SFT data preparation and training."""
+    parser = argparse.ArgumentParser(description="Train Qwen3-VL for DynEval task tokens.")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--train-only", action="store_true")
-    parser.add_argument("--source-json", type=Path, default=DEFAULT_SOURCE_JSON)
+    parser.add_argument(
+        "--source-json",
+        type=Path,
+        default=DEFAULT_SOURCE_JSON,
+        help="Optional source JSON for legacy in-script data preparation. Not needed with --train-only.",
+    )
     parser.add_argument("--image-root", type=Path, default=DEFAULT_IMAGE_ROOT)
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument(
@@ -727,7 +767,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--finetune-mode",
         choices=["lora", "full"],
-        default="lora",
+        default="full",
         help="Use 'lora' for adapter training or 'full' to update and save all model weights.",
     )
     parser.add_argument("--max-length", type=int, default=2048)
@@ -792,6 +832,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.prepare_only and args.train_only:
         raise SystemExit("Use only one of --prepare-only or --train-only.")
+    if not args.train_only and args.source_json is None:
+        raise SystemExit(
+            "Missing --source-json for in-script data preparation. "
+            "For normal public-repo usage, first build data with data/build_dyneval_sft.py "
+            "and then run this script with --train-only --data-dir <sft_dir>."
+        )
 
     train_file_was_default = args.train_file is None
     val_file_was_default = args.val_file is None
