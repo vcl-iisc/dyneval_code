@@ -362,49 +362,7 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
   --output-file output.json
 ```
 
-### Example Terminal Output
 
-```text
-========================================================================================
-DynEval Evaluator Result
-========================================================================================
-Prompt: a photo of a carrot
-Image: example.jpg
-
-Questions (1)
-  1. Is there a carrot in the photo?
-     ground-truth answer: yes
-
-Evaluation Scores (1)
-  1. score=5 | Is there a carrot in the photo?
-  Mean score: 5.000
-========================================================================================
-```
-
-When `--output-file` is provided, the script also saves JSON with the following structure:
-
-```json
-{
-  "prompt": "...",
-  "image_path": "...",
-  "elements": [],
-  "questions": [],
-  "answers": []
-}
-```
-
-### Optional Debug Fields
-
-Use `--include-raw` to save raw model responses. Use `--hide-elements` if you do not want intermediate elements in the terminal or saved JSON.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python run_inference.py \
-  --variant 2b \
-  --prompt "a photo of a carrot" \
-  --image example.jpg \
-  --output-file output_debug.json \
-  --include-raw
-```
 
 ### Command-Line Arguments
 

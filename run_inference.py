@@ -44,10 +44,12 @@ Return ONLY a JSON array."""
 
 
 def json_dumps(value: Any) -> str:
+    """Serialize Python objects as readable UTF-8 JSON."""
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
 def strip_code_fence(text: str) -> str:
+    """Remove Markdown code fences that models sometimes wrap around JSON."""
     text = (text or "").strip()
     if text.startswith("```"):
         lines = text.splitlines()
@@ -60,6 +62,7 @@ def strip_code_fence(text: str) -> str:
 
 
 def parse_first_json(raw: str) -> Any:
+    """Extract the first valid JSON object or array from a raw model response."""
     text = strip_code_fence(raw)
     if not text:
         return None
@@ -81,10 +84,12 @@ def parse_first_json(raw: str) -> Any:
 
 
 def normalize_key(text: str) -> str:
+    """Normalize text for case-insensitive duplicate detection."""
     return re.sub(r"\s+", " ", str(text).strip().lower())
 
 
 def dedupe_strings(items: list[str]) -> list[str]:
+    """Keep string items in original order while removing normalized duplicates."""
     out = []
     seen = set()
     for item in items:
@@ -97,6 +102,7 @@ def dedupe_strings(items: list[str]) -> list[str]:
 
 
 def dedupe_questions(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Remove duplicate element/question pairs and normalize yes/no answers."""
     out = []
     seen = set()
     for item in items:
@@ -113,6 +119,7 @@ def dedupe_questions(items: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def parse_elements(raw: str) -> list[str]:
+    """Parse the <T2IA> element-extraction response into a clean element list."""
     parsed = parse_first_json(raw)
     if isinstance(parsed, list):
         return dedupe_strings([str(item) for item in parsed if str(item).strip()])
@@ -124,6 +131,7 @@ def parse_elements(raw: str) -> list[str]:
 
 
 def parse_question(raw: str, element: str) -> dict[str, str] | None:
+    """Parse one generated question for a specific element."""
     parsed = parse_first_json(raw)
     if isinstance(parsed, dict):
         question = str(parsed.get("question", "")).strip()
@@ -137,6 +145,7 @@ def parse_question(raw: str, element: str) -> dict[str, str] | None:
 
 
 def normalize_score(value: Any) -> int:
+    """Convert a model score to an integer in [1, 5], or 0 if invalid."""
     try:
         score = int(round(float(value)))
     except (TypeError, ValueError):
@@ -146,6 +155,7 @@ def normalize_score(value: Any) -> int:
 
 
 def parse_answers(raw: str, questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Parse <EVALUATION> scores and align them with the generated questions."""
     parsed = parse_first_json(raw)
     if isinstance(parsed, dict):
         parsed = parsed.get("answers", parsed.get("scores", parsed))
@@ -186,6 +196,7 @@ def resolve_task_token(tokenizer, base: str) -> str:
 
 
 def build_element_messages(token: str, prompt: str) -> list[dict[str, Any]]:
+    """Build the chat messages for extracting visual elements from a prompt."""
     return [
         {"role": "system", "content": [{"type": "text", "text": T2IA_ELEMENT_SYSTEM}]},
         {"role": "user", "content": [{"type": "text", "text": f"{token}\nPrompt: {prompt}\nElements:"}]},
@@ -193,6 +204,7 @@ def build_element_messages(token: str, prompt: str) -> list[dict[str, Any]]:
 
 
 def build_question_messages(token: str, prompt: str, element: str) -> list[dict[str, Any]]:
+    """Build the chat messages for generating one yes/no question per element."""
     user_text = f'{token}\nDescription: {prompt}\nElement: {element}\nReturn JSON:\n{{"question": "...", "answer": "yes/no"}}'
     return [
         {"role": "system", "content": [{"type": "text", "text": T2IA_SINGLE_QUESTION_SYSTEM}]},
@@ -201,6 +213,7 @@ def build_question_messages(token: str, prompt: str, element: str) -> list[dict[
 
 
 def build_evaluation_messages(token: str, questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build multimodal chat messages for scoring generated questions on an image."""
     questions_text = "\n".join(f'{idx + 1}. Question: {item["question"]}' for idx, item in enumerate(questions))
     user_text = f"{token}\nQuestions to score:\n{questions_text}"
     return [
@@ -210,7 +223,10 @@ def build_evaluation_messages(token: str, questions: list[dict[str, Any]]) -> li
 
 
 class DynEvalRunner:
+    """Loads the DynEval checkpoint and runs the full T2IA-to-evaluation pipeline."""
+
     def __init__(self, args: argparse.Namespace):
+        """Load processor/model from a local checkpoint or the Hugging Face repo."""
         load_kwargs: dict[str, Any] = {
             "torch_dtype": getattr(torch, args.dtype) if args.dtype != "auto" else "auto",
             "device_map": args.device_map,
@@ -240,9 +256,11 @@ class DynEvalRunner:
 
     @property
     def device(self):
+        """Return the device where the loaded model currently lives."""
         return self.model.device
 
     def generate_text(self, messages: list[dict[str, Any]], max_new_tokens: int) -> str:
+        """Run text-only generation for element extraction or question generation."""
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -257,6 +275,7 @@ class DynEvalRunner:
         return self.processor.decode(generated[0, input_width:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
     def generate_image(self, messages: list[dict[str, Any]], image: Image.Image, max_new_tokens: int) -> str:
+        """Run image-conditioned generation for the evaluation/scoring step."""
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[image], return_tensors="pt", padding=True)
         inputs = {key: value.to(self.device) if torch.is_tensor(value) else value for key, value in inputs.items()}
@@ -266,6 +285,7 @@ class DynEvalRunner:
         return self.processor.decode(generated[0, input_width:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
     def run(self, prompt: str, image_path: Path, args: argparse.Namespace) -> dict[str, Any]:
+        """Execute elements -> questions -> image scoring for one prompt/image pair."""
         image = Image.open(image_path).convert("RGB")
 
         raw_elements = self.generate_text(build_element_messages(self.t2ia_token, prompt), args.max_new_tokens_elements)
@@ -301,6 +321,7 @@ class DynEvalRunner:
 
 
 def format_result(result: dict[str, Any]) -> str:
+    """Format the pipeline result for readable terminal output."""
     lines = ["=" * 88, "DynEval Evaluator Result", "=" * 88]
     lines.append(f"Prompt: {result['prompt']}")
     lines.append(f"Image: {result['image_path']}")
@@ -335,10 +356,11 @@ def format_result(result: dict[str, Any]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line options for local or Hugging Face inference."""
     parser = argparse.ArgumentParser(description="Run DynEval Evaluator inference from local or Hugging Face weights.")
     parser.add_argument("--checkpoint", type=str, default=None, help="Local checkpoint path. If set, this overrides --variant/--repo-id.")
     parser.add_argument("--repo-id", type=str, default=HF_REPO_ID, help="Hugging Face repo id used when --checkpoint is not set.")
-    parser.add_argument("--variant", choices=["2b", "4b"], default="4b", help="HF model variant to load from the repo.")
+    parser.add_argument("--variant", choices=["2b", "4b"], default="2b", help="HF model variant to load from the repo.")
     parser.add_argument("--prompt", type=str, required=True, help="Text-to-image prompt for the image.")
     parser.add_argument("--image", type=Path, required=True, help="Image path to evaluate.")
     parser.add_argument("--output-file", type=Path, default=None, help="Optional JSON output path.")
@@ -353,6 +375,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """CLI entry point: validate inputs, run inference, print and optionally save JSON."""
     args = parse_args()
     if not args.image.exists():
         raise FileNotFoundError(f"Image not found: {args.image}")
