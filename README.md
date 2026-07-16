@@ -1,6 +1,6 @@
 # DynEval: Holistic Evaluation of Text-to-Image Generative Models in the Wild (ECCV-26)
 
-Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, and Anirban Chakraborty
+Shyam Marjit*, Dheeraj Baiju*, Anuj Shikarkhane*, Akhil Sakthieswaran, Sayak Paul, and Anirban Chakraborty
 
 **Model Checkpoints:** [**DynEval-2B** & **DynEval-4B**](https://huggingface.co/vcl-iisc/DynEval-Evaluator) · **Dataset:** [**DynEval-1K**, **GenDB**, **DynEvalInstruct**](https://huggingface.co/datasets/vcl-iisc/DynEval-dataset) *(with teacher model responses)*
 
