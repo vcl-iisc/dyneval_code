@@ -14,9 +14,13 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
   - [Step 2 — Generate Images](#step-2--generate-images)
   - [Step 3 — Distill Annotations with a Teacher VLM](#step-3--distill-annotations-with-a-teacher-vlm)
   - [Step 4 — Fine-tune DynEval](#step-4--fine-tune-dyneval)
-    - [4a — Configure Dataset Paths](#4a--configure-dataset-paths)
-    - [4b — Annotation Format](#4b--annotation-format)
-    - [4c — Run Fine-tuning](#4c--run-fine-tuning)
+    - [4a — Task Tokens](#4a--task-tokens)
+    - [4b — SFT Annotation Format](#4b--sft-annotation-format)
+    - [4c — Build SFT Data](#4c--build-sft-data)
+    - [4d — Run Full Fine-tuning](#4d--run-full-fine-tuning)
+    - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
+- [Quantitative Results](#quantitative-results)
+- [Qualitative Results](#qualitative-results)
 - [Inference](#inference)
   - [Install Dependencies](#install-dependencies)
   - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
@@ -26,8 +30,6 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
   - [Optional Debug Fields](#optional-debug-fields)
   - [Command-Line Arguments](#command-line-arguments)
   - [Notes](#notes)
-- [Quantitative Results](#quantitative-results)
-- [Qualitative Results](#qualitative-results)
 
 ---
 
@@ -93,153 +95,243 @@ The teacher model uses natural-language prompts only. The student DynEval model 
 
 ### Step 4 — Fine-tune DynEval
 
-Fine-tune `Qwen/Qwen3-VL-4B-Instruct` (DynEval-4B) or `Qwen/Qwen3-VL-2B-Instruct` (DynEval-2B) on the DynEvalInstruct dataset produced in Step 3. DynEval is **not** distilled as a black-box regressor. Instead, training uses three task-specific tokens that trigger distinct evaluation procedures:
+Fine-tune `Qwen/Qwen3-VL-4B-Instruct` (DynEval-4B) or `Qwen/Qwen3-VL-2B-Instruct` (DynEval-2B) using the training script in this repository:
 
-| Token | Token ID | Role |
-|-------|----------|------|
-| `<\|T2IA\|>` | 151669 | Prompt-only alignment question generation, including distortion checks |
-| `<\|IQA\|>` | 151670 | Scene-graph construction and image-quality question generation |
-| `<\|EVALUATION\|>` | 151671 | VQA-style answering and scoring in the range [1--5] |
+```text
+training/train_qwen3vl_dyneval.py
+```
 
-These tokens are registered in the tokenizer before fine-tuning and must appear in the **human** turns of DynEvalInstruct. The same token strings and IDs apply to both DynEval-2B and DynEval-4B. Training follows a **curriculum learning** strategy:
-- **Stage 1:** `<\|T2IA\|>` question generation, then `<\|EVALUATION\|>` scoring on the generated questions
-- **Stage 2:** `<\|IQA\|>` scene-graph / quality-question generation, then `<\|EVALUATION\|>` scoring
+This code does **not** use the older `Qwen3-VL/qwen-vl-finetune/qwenvl/data/__init__.py` dataset-registration flow. You do not need to set `DYNEVALINSTRUCT_T2IA_ANNOTATION`, `DYNEVALINSTRUCT_T2IA_DATA`, `DYNEVALINSTRUCT_IQA_ANNOTATION`, or `DYNEVALINSTRUCT_IQA_DATA`.
 
-After fine-tuning, the checkpoint should contain an `added_tokens.json` with:
+Instead, training uses prebuilt SFT JSONL files:
+
+```text
+data/sft/<dataset_name>/train.jsonl
+data/sft/<dataset_name>/val.jsonl
+```
+
+Each JSONL row already contains the full chat messages for one task. The trainer only needs:
+
+```bash
+--data-dir data/sft/<dataset_name>
+```
+
+#### 4a — Task Tokens
+
+The training script registers the task tokens at startup:
+
+| Token | Role |
+|-------|------|
+| `<T2IA>` | Prompt-only text-to-image alignment element extraction and question generation |
+| `<IQA>` | Image-quality assessment question generation, including scene/quality checks |
+| `<EVALUATION>` | Image-based question answering and 1--5 scoring |
+
+Training uses:
+
+- `<T2IA>` for text-to-image alignment element extraction and visual question generation.
+- `<IQA>` for image-quality assessment question generation, including scene/quality checks.
+- `<EVALUATION>` for image-based answering and 1--5 scoring of generated questions.
+
+#### 4b — SFT Annotation Format
+
+Each training row is a JSON object with a `messages` field in Qwen chat format.
+
+**`<T2IA>` element extraction or question generation:**
 
 ```json
 {
-  "<|T2IA|>": 151669,
-  "<|IQA|>": 151670,
-  "<|EVALUATION|>": 151671
+  "id": "sample_id",
+  "task": "t2ia_element_extraction",
+  "messages": [
+    {"role": "system", "content": [{"type": "text", "text": "..."}]},
+    {"role": "user", "content": [{"type": "text", "text": "<T2IA>\nPrompt: a photo of a carrot\nElements:"}]},
+    {"role": "assistant", "content": [{"type": "text", "text": "[\"carrot (food)\"]"}]}
+  ]
 }
 ```
 
-#### 4a — Configure Dataset Paths
+**`<IQA>` image-quality question generation:**
 
-DynEvalInstruct dataset entries are already registered in `Qwen3-VL/qwen-vl-finetune/qwenvl/data/__init__.py`. Set paths through environment variables before launching training:
+```json
+{
+  "id": "sample_id",
+  "task": "iqa_question_generation",
+  "image_path": "/path/to/image.png",
+  "messages": [
+    {"role": "system", "content": [{"type": "text", "text": "..."}]},
+    {
+      "role": "user",
+      "content": [
+        {"type": "image"},
+        {"type": "text", "text": "<IQA>\nGenerate image-quality assessment questions for visible artifacts, distortions, texture, shape consistency, and spatial quality."}
+      ]
+    },
+    {"role": "assistant", "content": [{"type": "text", "text": "[{\"question\": \"Are object shapes visually coherent?\", \"answer\": \"yes\"}]"}]}
+  ]
+}
+```
+
+**`<EVALUATION>` image scoring:**
+
+```json
+{
+  "id": "sample_id",
+  "task": "evaluation",
+  "image_path": "/path/to/image.png",
+  "messages": [
+    {"role": "system", "content": [{"type": "text", "text": "..."}]},
+    {
+      "role": "user",
+      "content": [
+        {"type": "image"},
+        {"type": "text", "text": "<EVALUATION>\nQuestions to score:\n1. Is there a carrot in the photo?"}
+      ]
+    },
+    {"role": "assistant", "content": [{"type": "text", "text": "[{\"question\": \"Is there a carrot in the photo?\", \"score\": 5}]"}]}
+  ]
+}
+```
+
+Do not put the task token in the assistant response. The task token should appear in the user instruction.
+
+#### 4c — Build SFT Data
+
+Use `data_building/build_dyneval_sft.py` for DynEval-style folders containing:
+
+- a question folder
+- an answer folder
+- an image root
+
+Example:
 
 ```bash
-export DYNEVALINSTRUCT_T2IA_ANNOTATION=/path/to/dynevalinstruct_t2ia.json
-export DYNEVALINSTRUCT_T2IA_DATA=/path/to/image/data
-export DYNEVALINSTRUCT_IQA_ANNOTATION=/path/to/dynevalinstruct_iqa.json
-export DYNEVALINSTRUCT_IQA_DATA=/path/to/image/data
+python data_building/build_dyneval_sft.py \
+  --questions-dir /path/to/questions \
+  --answers-dir /path/to/answers \
+  --images-root /path/to/images \
+  --output-dir data/sft/my_dyneval_sft_data \
+  --val-ratio 0.05 \
+  --seed 42
 ```
 
-Alternatively, edit the default paths in `qwenvl/data/__init__.py` for `DYNEVALINSTRUCT_T2IA` and `DYNEVALINSTRUCT_IQA`.
+This creates mixed SFT data for:
 
-Stage 1 annotations should contain only samples whose human turn starts with `<\|T2IA\|>` or `<\|EVALUATION\|>`. Stage 2 annotations should contain only samples whose human turn starts with `<\|IQA\|>` or `<\|EVALUATION\|>`.
+- `<T2IA>` element extraction
+- `<T2IA>` single-question generation
+- `<EVALUATION>` image scoring
 
-#### 4b — Annotation Format
+To combine multiple already-built SFT folders:
 
-Each sample follows the Qwen-VL conversation format. The task token must be placed at the start of the human instruction, before the task-specific prompt text. Do **not** place `<\|T2IA\|>`, `<\|IQA\|>`, or `<\|EVALUATION\|>` in the assistant answer.
-
-**`<\|T2IA\|>` question generation (prompt only, no image):**
-```python
-{
-    "conversations": [
-        {
-            "from": "human",
-            "value": "<|T2IA|>\nPrompt: a photo of a bench\nGenerate atomic yes/no verification questions for text-to-image alignment."
-        },
-        {
-            "from": "gpt",
-            "value": "[{\"question\": \"Is a bench visible?\", \"answer\": \"yes\"}]"
-        }
-    ]
-}
+```bash
+python data_building/combine_sft_dirs.py \
+  --input-dirs \
+    data/sft/dataset_a \
+    data/sft/dataset_b \
+    data/sft/dataset_c \
+  --output-dir data/sft/combined_dyneval_sft_data
 ```
 
-**`<\|IQA\|>` scene-graph and quality-question generation (image required):**
-```python
-{
-    "image": "images/001.jpg",
-    "conversations": [
-        {
-            "from": "human",
-            "value": "<image>\n<|IQA|>\nParse the image into a scene graph and generate image-quality questions for shape consistency, distortions, texture fidelity, and spatial cues."
-        },
-        {
-            "from": "gpt",
-            "value": "{\"scene_graph\": {...}, \"questions\": [...]}"
-        }
-    ]
-}
+#### 4d — Run Full Fine-tuning
+
+Always pass `--finetune-mode full` for the full fine-tuning runs reported for DynEval.
+
+**DynEval-2B:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29511 training/train_qwen3vl_dyneval.py \
+  --train-only \
+  --finetune-mode full \
+  --model-path /path/to/qwen3vl-2b-checkpoint \
+  --data-dir data/sft/my_dyneval_sft_data \
+  --output-dir checkpoints/final/qwen3vl-2b-dyneval-new-v1 \
+  --device-map none \
+  --gradient-checkpointing \
+  --ddp-find-unused-parameters \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --epochs 1 \
+  --lr 1e-7 \
+  --lr-scheduler-type cosine \
+  --warmup-ratio 0.03 \
+  --optim adafactor \
+  --eval-steps 500 \
+  --save-steps 1000000 \
+  --logging-steps 20 \
+  --dataloader-num-workers 4 \
+  --max-length 4096 \
+  --report-to none
 ```
-
-**`<\|EVALUATION\|>` answering and scoring:**
-```python
-{
-    "image": "images/001.jpg",
-    "conversations": [
-        {
-            "from": "human",
-            "value": "<image>\n<|EVALUATION|>\nPrompt: a photo of a bench\nQuestions:\n1. Is a bench visible?\nAnswer each question and assign a score from 1 to 5."
-        },
-        {
-            "from": "gpt",
-            "value": "{\"answers\": [{\"question\": \"Is a bench visible?\", \"score\": 5, \"reasoning\": \"...\"}]}"
-        }
-    ]
-}
-```
-
-At inference time, DynEval triggers `<\|T2IA\|>` first, merges the generated questions, runs `<\|EVALUATION\|>` for the T2IA score, then triggers `<\|IQA\|>`, and finally runs `<\|EVALUATION\|>` again for the IQA score.
-
-#### 4c — Run Fine-tuning
-
-Launch curriculum fine-tuning from `Qwen3-VL/qwen-vl-finetune/`. First run the preflight check, then train in two stages.
 
 **DynEval-4B:**
 
 ```bash
-cd Qwen3-VL/qwen-vl-finetune
-python3 scripts/validate_dyneval_train_setup.py
-
-export DYNEVALINSTRUCT_T2IA_ANNOTATION=/path/to/dynevalinstruct_t2ia.json
-export DYNEVALINSTRUCT_T2IA_DATA=/path/to/image/data
-
-# Stage 1: <|T2IA|> + <|EVALUATION|>
-bash scripts/sft_qwen_3_vl_4b.sh 1
-
-export DYNEVALINSTRUCT_IQA_ANNOTATION=/path/to/dynevalinstruct_iqa.json
-export DYNEVALINSTRUCT_IQA_DATA=/path/to/image/data
-
-# Stage 2: <|IQA|> + <|EVALUATION|>, initialized from Stage 1 checkpoint
-bash scripts/sft_qwen_3_vl_4b.sh 2
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29512 training/train_qwen3vl_dyneval.py \
+  --train-only \
+  --finetune-mode full \
+  --model-path /path/to/qwen3vl-4b-checkpoint \
+  --data-dir data/sft/my_dyneval_sft_data \
+  --output-dir checkpoints/final/qwen3vl-4b-dyneval-new-v1 \
+  --device-map none \
+  --gradient-checkpointing \
+  --ddp-find-unused-parameters \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --epochs 1 \
+  --lr 1e-7 \
+  --lr-scheduler-type cosine \
+  --warmup-ratio 0.03 \
+  --optim adafactor \
+  --eval-steps 500 \
+  --save-steps 1000000 \
+  --logging-steps 20 \
+  --dataloader-num-workers 4 \
+  --max-length 4096 \
+  --report-to none
 ```
 
-**DynEval-2B** uses the same tokens, IDs, and curriculum. Replace the launch script with `scripts/sft_qwen_3_vl_2b.sh`:
 
-```bash
-cd Qwen3-VL/qwen-vl-finetune
-python3 scripts/validate_dyneval_train_setup.py
+## Quantitative Results
 
-export DYNEVALINSTRUCT_T2IA_ANNOTATION=/path/to/dynevalinstruct_t2ia.json
-export DYNEVALINSTRUCT_T2IA_DATA=/path/to/image/data
-bash scripts/sft_qwen_3_vl_2b.sh 1
+<p align="center">
+  <img src="assets/zero_shot.png" width="800"/>
+  <br>
+  <em>Zero-shot cross-dataset evaluation across diverse benchmarks, comparing existing scoring methods with EvalMuse and DynEval variants.</em>
+</p>
 
-export DYNEVALINSTRUCT_IQA_ANNOTATION=/path/to/dynevalinstruct_iqa.json
-export DYNEVALINSTRUCT_IQA_DATA=/path/to/image/data
-bash scripts/sft_qwen_3_vl_2b.sh 2
-```
+<p align="center">
+  <img src="assets/zero_shot2.png" width="800"/>
+  <br>
+  <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
+</p>
 
-Both scripts pass:
+## Qualitative Results
 
-```bash
---additional_special_tokens "<|T2IA|>,<|IQA|>,<|EVALUATION|>"
-```
+<p align="center">
+  <img src="assets/geneval_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
+</p>
 
-Keep the hyperparameter configuration unchanged unless noted above. Key settings:
-- Base models: `Qwen/Qwen3-VL-4B-Instruct` or `Qwen/Qwen3-VL-2B-Instruct`
-- Learning rate: `1e-5`
-- Task tokens: `<\|T2IA\|>` (151669), `<\|IQA\|>` (151670), `<\|EVALUATION\|>` (151671)
-- Stage 1 dataset: `dynevalinstruct_t2ia`
-- Stage 2 dataset: `dynevalinstruct_iqa`
-- Stage 1 output: `./output/dyneval_4b_stage1_t2ia` or `./output/dyneval_2b_stage1_t2ia`
-- Stage 2 output: `./output/dyneval_4b_stage2_iqa` or `./output/dyneval_2b_stage2_iqa`
+<p align="center">
+  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
 
-Published checkpoints are available at [`vcl-iisc/DynEval-Evaluator`](https://huggingface.co/vcl-iisc/DynEval-Evaluator) under `DynEval-2B/` and `DynEval-4B/`.
+<p align="center">
+  <img src="assets/genai_bench_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
+
+
+
+<p align="center">
+  <img src="assets/fail.png" width="800"/>
+  <br>
+  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
+  </em>
+</p>
 
 ---
 
@@ -257,6 +349,7 @@ The script runs the complete alignment-evaluation flow:
 3. Score the image against the generated questions with `<|EVALUATION|>`.
 
 By default, the terminal displays only the generated questions and final scores. Intermediate elements and raw model responses are hidden unless explicitly requested.
+When `--variant` is omitted, the script loads DynEval-4B by default.
 
 ### Install Dependencies
 
@@ -288,7 +381,6 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python run_inference.py \
-  --variant 4b \
   --prompt "a photo of a carrot" \
   --image example.jpg \
   --output-file output.json
@@ -356,7 +448,7 @@ These flags affect the saved JSON only; the terminal output remains concise.
 
 ### Command-Line Arguments
 
-- `--variant {2b,4b}`: Hugging Face model variant; defaults to `2b`.
+- `--variant {2b,4b}`: Hugging Face model variant; defaults to `4b`.
 - `--checkpoint PATH`: local checkpoint to load instead of Hugging Face weights.
 - `--repo-id REPO_ID`: Hugging Face repository; defaults to `vcl-iisc/DynEval-Evaluator`.
 - `--prompt TEXT`: text-to-image prompt corresponding to the image (required).
@@ -376,48 +468,3 @@ These flags affect the saved JSON only; the terminal output remains concise.
 - The script adds the DynEval task tokens internally; do not add `<|T2IA|>` or `<|EVALUATION|>` to `--prompt`.
 - The Hugging Face repository stores the variants in the `DynEval-2B` and `DynEval-4B` subfolders.
 - `--output-file` is optional. The formatted result is always printed to the terminal.
-
----
-
-## Quantitative Results
-
-<p align="center">
-  <img src="assets/zero_shot.png" width="800"/>
-  <br>
-  <em>Zero-shot cross-dataset evaluation across diverse benchmarks, comparing existing scoring methods with EvalMuse and DynEval variants.</em>
-</p>
-
-<p align="center">
-  <img src="assets/zero_shot2.png" width="800"/>
-  <br>
-  <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
-</p>
-
-## Qualitative Results
-
-<p align="center">
-  <img src="assets/geneval_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
-</p>
-
-<p align="center">
-  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-<p align="center">
-  <img src="assets/genai_bench_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-
-
-<p align="center">
-  <img src="assets/fail.png" width="800"/>
-  <br>
-  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
-  </em>
-</p>
