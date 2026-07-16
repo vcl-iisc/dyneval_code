@@ -19,8 +19,6 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
     - [4c — Build SFT Data](#4c--build-sft-data)
     - [4d — Run Full Fine-tuning](#4d--run-full-fine-tuning)
     - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
-- [Quantitative Results](#quantitative-results)
-- [Qualitative Results](#qualitative-results)
 - [Inference](#inference)
   - [Install Dependencies](#install-dependencies)
   - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
@@ -30,6 +28,8 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
   - [Optional Debug Fields](#optional-debug-fields)
   - [Command-Line Arguments](#command-line-arguments)
   - [Notes](#notes)
+- [Quantitative Results](#quantitative-results)
+- [Qualitative Results](#qualitative-results)
 
 ---
 
@@ -289,50 +289,6 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29512 trainin
   --report-to none
 ```
 
-
-## Quantitative Results
-
-<p align="center">
-  <img src="assets/zero_shot.png" width="800"/>
-  <br>
-  <em>Zero-shot cross-dataset evaluation across diverse benchmarks, comparing existing scoring methods with EvalMuse and DynEval variants.</em>
-</p>
-
-<p align="center">
-  <img src="assets/zero_shot2.png" width="800"/>
-  <br>
-  <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
-</p>
-
-## Qualitative Results
-
-<p align="center">
-  <img src="assets/geneval_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
-</p>
-
-<p align="center">
-  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-<p align="center">
-  <img src="assets/genai_bench_dyneval.png" width="800"/>
-  <br>
-  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
-</p>
-
-
-
-<p align="center">
-  <img src="assets/fail.png" width="800"/>
-  <br>
-  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
-  </em>
-</p>
-
 ---
 
 ## Inference
@@ -468,3 +424,48 @@ These flags affect the saved JSON only; the terminal output remains concise.
 - The script adds the DynEval task tokens internally; do not add `<|T2IA|>` or `<|EVALUATION|>` to `--prompt`.
 - The Hugging Face repository stores the variants in the `DynEval-2B` and `DynEval-4B` subfolders.
 - `--output-file` is optional. The formatted result is always printed to the terminal.
+
+## Quantitative Results
+
+<p align="center">
+  <img src="assets/zero_shot.png" width="800"/>
+  <br>
+  <em>Zero-shot cross-dataset evaluation across diverse benchmarks, comparing existing scoring methods with EvalMuse and DynEval variants.</em>
+</p>
+
+<p align="center">
+  <img src="assets/zero_shot2.png" width="800"/>
+  <br>
+  <em>More recent Zero-shot cross-dataset evaluation across diverse benchmarks with newer T2I evaluators.</em>
+</p>
+
+## Qualitative Results
+
+<p align="center">
+  <img src="assets/geneval_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenEval dataset. Inputs consist of image–text prompt pairs from a mix of real and generated images, shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5). Although DynEval is trained on synthetic images, the fine-tuned model demonstrates the ability to generalize to real images.</em>
+</p>
+
+<p align="center">
+  <img src="assets/AGIKA-3K_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the AGIKA-3K dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
+
+<p align="center">
+  <img src="assets/genai_bench_dyneval.png" width="800"/>
+  <br>
+  <em>Evaluation on the GenAI-Bench dataset. Inputs consist of image–text prompt pairs shown alongside human ratings, the mean human rating, and the DynEval score (scale: 1–5).</em>
+</p>
+
+
+
+<p align="center">
+  <img src="assets/fail.png" width="800"/>
+  <br>
+  <em>Alignment scores across prompt sub-categories in DynEval-1K evaluation dataset, grouped by model tier. The 42 sub-categories span nine semantic dimensions, and scores represent the average DynEval alignment score. Models are grouped into three tiers based on overall alignment performance, with bars showing the tier-averaged score for each sub-category. Tier-1 models consistently achieve stronger alignment across most sub-categories, with the largest performance gaps appearing in challenging categories such as counting, text rendering, and high-complexity prompts.
+  </em>
+</p>
+
+---
