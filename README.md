@@ -21,10 +21,11 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
     - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
 - [Inference](#inference)
   - [Install Dependencies](#install-dependencies)
-  - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
   - [Run DynEval-4B from Hugging Face](#run-dyneval-4b-from-hugging-face)
+  - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
+  - [Choose Score Type](#choose-score-type)
+  - [Local Checkpoint Override](#local-checkpoint-override)
   - [Example Terminal Output](#example-terminal-output)
-  - [Optional Debug Fields](#optional-debug-fields)
   - [Command-Line Arguments](#command-line-arguments)
   - [Notes](#notes)
 - [Quantitative Results](#quantitative-results)
@@ -316,20 +317,18 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_qwen3vl_dyne
 
 ## Inference
 
-This repository includes `run_inference.py` for normal single-image inference with DynEval-2B or DynEval-4B from [`vcl-iisc/DynEval-Evaluator`](https://huggingface.co/vcl-iisc/DynEval-Evaluator).
+Use `inference/run-inference.py` for single-image inference with DynEval-2B or DynEval-4B from [`vcl-iisc/DynEval-Evaluator`](https://huggingface.co/vcl-iisc/DynEval-Evaluator).
 
-The script runs the complete alignment-evaluation flow:
+By default, the script loads **DynEval-4B** from Hugging Face and computes both scores:
 
-1. Extract text-to-image elements internally with `<|T2IA|>`.
-2. Generate one yes/no visual question for each element with `<|T2IA|>`.
-3. Score the image against the generated questions with `<|EVALUATION|>`.
+- **T2IA score:** text-to-image alignment score on a 1–5 scale.
+- **IQA score:** image-quality assessment score on a 1–5 scale.
 
-By default, the terminal displays extracted elements, generated questions, and final scores. Raw model responses are hidden unless explicitly requested.
-When `--variant` is omitted, the script loads DynEval-4B by default.
+The script can also compute only one score with `--score-type t2ia` or `--score-type iqa`.
 
 ### Install Dependencies
 
-Use an environment with a recent Qwen3-VL-compatible version of `transformers`:
+Use an environment with a Qwen3-VL-compatible version of `transformers`:
 
 ```bash
 pip install torch transformers accelerate pillow
@@ -341,45 +340,136 @@ If the Hugging Face model requires access approval, accept it on the [model page
 huggingface-cli login
 ```
 
-Run the following commands from the repository root (the directory containing `run_inference.py`).
+Run commands from the repository root.
+
+### Run DynEval-4B from Hugging Face
+
+DynEval-4B is the default, so `--model-size 4b` is optional.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output_4b.json
+```
 
 ### Run DynEval-2B from Hugging Face
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python run_inference.py \
-  --variant 2b \
+CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
+  --model-size 2b \
   --prompt "a photo of a carrot" \
   --image example.jpg \
-  --output-file output.json
+  --output-file output_2b.json
 ```
 
-### Run DynEval-4B from Hugging Face
+### Choose Score Type
+
+Compute both scores, the default:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python run_inference.py \
-  --prompt "a photo of a carrot" \
-  --image example.jpg \
-  --output-file output.json
+--score-type both
 ```
 
+Compute only text-to-image alignment:
 
+```bash
+--score-type t2ia
+```
+
+Compute only image quality assessment:
+
+```bash
+--score-type iqa
+```
+
+Example:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
+  --model-size 4b \
+  --score-type iqa \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output_iqa.json
+```
+
+### Local Checkpoint Override
+
+Use `--checkpoint` only when weights are already available locally. It overrides `--model-size` and `--repo-id`.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
+  --checkpoint /path/to/local/checkpoint \
+  --score-type both \
+  --prompt "a photo of a carrot" \
+  --image example.jpg \
+  --output-file output_local.json
+```
+
+### Example Terminal Output
+
+```text
+========================================================================================
+DynEval Evaluator Result
+========================================================================================
+Prompt: a photo of a carrot
+Image: example.jpg
+
+Elements (1)
+  1. carrot (food)
+
+T2IA Questions (1)
+  1. Is there a carrot in the photo?
+     ground-truth answer: yes
+
+T2IA Evaluation Scores (1)
+  1. score=5 | Is there a carrot in the photo?
+  T2IA score: 5.000 / 5
+
+IQA Scene Graph
+...
+
+IQA Object Quality Analysis
+...
+
+IQA Questions (3)
+  1. score=5.000 / 5 | Is the carrot shape natural and free from distortion?
+     target: yes | answer: yes
+     reasoning: ...
+
+IQA score: 4.667 / 5
+========================================================================================
+```
+
+When `--output-file` is provided, the script also saves the structured JSON result.
 
 ### Command-Line Arguments
 
-- `--variant {2b,4b}`: Hugging Face model variant; defaults to `4b`.
+- `--model-size {2b,4b}` or `--variant {2b,4b}`: Hugging Face model variant; defaults to `4b`.
+- `--score-type {t2ia,iqa,both}`: score to compute; defaults to `both`.
 - `--repo-id REPO_ID`: Hugging Face repository; defaults to `vcl-iisc/DynEval-Evaluator`.
+- `--checkpoint PATH`: optional local checkpoint path; overrides Hugging Face loading.
 - `--prompt TEXT`: text-to-image prompt corresponding to the image (required).
 - `--image PATH`: image to evaluate (required).
 - `--output-file PATH`: optional path at which to save the JSON result.
 - `--dtype {bfloat16,float16,float32,auto}`: model precision; defaults to `bfloat16`.
 - `--device-map DEVICE_MAP`: model device placement; defaults to `auto`.
-- `--max-new-tokens-elements N`: element-extraction generation limit; defaults to `256`.
-- `--max-new-tokens-questions N`: per-question generation limit; defaults to `256`.
-- `--max-new-tokens-answers N`: evaluation generation limit; defaults to `768`.
-- `--hide-elements`: hide extracted elements from the terminal and saved JSON.
+- `--max-new-tokens-elements N`: T2IA element-extraction generation limit; defaults to `256`.
+- `--max-new-tokens-questions N`: T2IA question-generation limit; defaults to `256`.
+- `--max-new-tokens-answers N`: T2IA evaluation generation limit; defaults to `768`.
+- `--max-new-tokens-iqa-scene-graph N`: IQA scene-graph generation limit; defaults to `512`.
+- `--max-new-tokens-iqa-decomposition N`: IQA decomposition generation limit; defaults to `768`.
+- `--max-new-tokens-iqa-final N`: IQA scored-question generation limit; defaults to `512`.
+- `--hide-elements`: hide extracted T2IA elements from terminal and saved JSON.
 - `--include-raw`: include raw model responses in the saved JSON.
 
+### Notes
 
+- For best reproducibility, use the exact prompt associated with the evaluated image.
+- Do not manually add `<|T2IA|>`, `<|IQA|>`, or `<|EVALUATION|>` to `--prompt`; the script adds task tokens internally.
+- The Hugging Face repository stores weights in the `DynEval-2B` and `DynEval-4B` subfolders.
+- `--output-file` is optional. The formatted result is always printed to the terminal.
 
 ## Quantitative Results
 

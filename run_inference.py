@@ -42,6 +42,21 @@ SCORING SCALE:
   5 = YES, DEFINITELY | 4 = YES, PROBABLY | 3 = UNCERTAIN | 2 = NO, PROBABLY | 1 = NO, DEFINITELY
 Return ONLY a JSON array."""
 
+IQA_SCENE_GRAPH_PROMPT = """Here is an image generated for this prompt "{prompt}".
+Now generate a scene graph by considering only the image. Consider the text prompt for your reference. The scene graph should represent the objects present in the image as nodes, and edges should represent the relationship between the nodes (objects)."""
+
+IQA_DECOMPOSITION_PROMPT = """We are doing an image quality assessment. We have already done the text-to-image alignment, so you don't need to generate questions to check the alignment. To assess the quality of each object in the image, decompose each object into its respective part-label object attributes and evaluate each segment individually with respect to several objectives, such as shape, distortions, 3D spatial relationships, texture, etc.
+Generate yes/no questions with target answers."""
+
+IQA_FINAL_PROMPT = """Now answer these questions for this image and generate a score given the target answers on a scale of 1-5.
+Do not write paragraphs, markdown, summaries, or bullet-point analysis.
+Return only valid JSON in this exact format:
+{
+  "questions": [
+    {"question": "...", "target_answer": "yes/no", "answer": "yes/no", "score": 1, "reasoning": "..."}
+  ]
+}
+Each "score" must be a number from 1 to 5 based on how well the image answer matches the target answer."""
 
 def json_dumps(value: Any) -> str:
     """Serialize Python objects as readable UTF-8 JSON."""
@@ -154,6 +169,16 @@ def normalize_score(value: Any) -> int:
     return score if 1 <= score <= 5 else 0
 
 
+def normalize_iqa_score(value: Any) -> float:
+    """Convert an IQA score to a number in [1, 5], or 0 if invalid."""
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        match = re.search(r"\b([1-5](?:\.\d+)?)\b", str(value))
+        score = float(match.group(1)) if match else 0.0
+    return score if 1.0 <= score <= 5.0 else 0.0
+
+
 def parse_answers(raw: str, questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Parse <EVALUATION> scores and align them with the generated questions."""
     parsed = parse_first_json(raw)
@@ -177,6 +202,81 @@ def parse_answers(raw: str, questions: list[dict[str, Any]]) -> list[dict[str, A
     for idx, question in enumerate(questions):
         out.append({"question": question["question"], "reasoning": "", "score": fallback_scores[idx] if idx < len(fallback_scores) else 0})
     return out
+
+
+def parse_iqa_result(raw: str) -> dict[str, Any]:
+    """Parse IQA questions with target answers, model answers, and 1-5 scores."""
+    parsed = parse_first_json(raw)
+    questions: list[dict[str, Any]] = []
+    seen = set()
+
+    if isinstance(parsed, dict):
+        raw_questions = parsed.get("questions", parsed.get("Questions", []))
+        if isinstance(raw_questions, list):
+            for item in raw_questions:
+                if isinstance(item, dict):
+                    question = str(item.get("question", item.get("Question", ""))).strip()
+                    score = normalize_iqa_score(item.get("score", item.get("Score", 0)))
+                    target_answer = str(item.get("target_answer", item.get("target", ""))).strip().lower()
+                    answer = str(item.get("answer", item.get("Answer", ""))).strip().lower()
+                    reasoning = str(item.get("reasoning", item.get("Reasoning", ""))).strip()
+                else:
+                    question = str(item).strip()
+                    score = 0.0
+                    target_answer = ""
+                    answer = ""
+                    reasoning = ""
+                if question:
+                    key = normalize_key(question)
+                    if key not in seen:
+                        seen.add(key)
+                        questions.append(
+                            {
+                                "question": question,
+                                "target_answer": target_answer,
+                                "answer": answer,
+                                "score": score,
+                                "reasoning": reasoning,
+                            }
+                        )
+    elif isinstance(parsed, list):
+        for item in parsed:
+            if isinstance(item, dict):
+                question = str(item.get("question", item.get("Question", ""))).strip()
+                score = normalize_iqa_score(item.get("score", item.get("Score", 0)))
+                target_answer = str(item.get("target_answer", item.get("target", ""))).strip().lower()
+                answer = str(item.get("answer", item.get("Answer", ""))).strip().lower()
+                reasoning = str(item.get("reasoning", item.get("Reasoning", ""))).strip()
+            else:
+                question = str(item).strip()
+                score = 0.0
+                target_answer = ""
+                answer = ""
+                reasoning = ""
+            if question:
+                key = normalize_key(question)
+                if key not in seen:
+                    seen.add(key)
+                    questions.append(
+                        {
+                            "question": question,
+                            "target_answer": target_answer,
+                            "answer": answer,
+                            "score": score,
+                            "reasoning": reasoning,
+                        }
+                    )
+    if not questions:
+        for match in re.findall(r"(?:^|\n)\s*(?:[-*]|\d+[.)])\s*(.+?\?)", raw or ""):
+            question = match.strip()
+            key = normalize_key(question)
+            if key not in seen:
+                seen.add(key)
+                questions.append({"question": question, "target_answer": "", "answer": "", "score": 0.0, "reasoning": ""})
+
+    valid_scores = [item["score"] for item in questions if normalize_iqa_score(item.get("score")) > 0]
+    score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
+    return {"questions": questions, "score": score}
 
 
 def resolve_task_token(tokenizer, base: str) -> str:
@@ -222,6 +322,39 @@ def build_evaluation_messages(token: str, questions: list[dict[str, Any]]) -> li
     ]
 
 
+def build_iqa_scene_graph_messages(token: str, prompt: str) -> list[dict[str, Any]]:
+    """Start the in-context IQA conversation with image-conditioned scene graph generation."""
+    user_text = f"{token}\n{IQA_SCENE_GRAPH_PROMPT.format(prompt=prompt)}"
+    return [
+        {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": user_text}]},
+    ]
+
+
+def build_iqa_decomposition_messages(token: str, prompt: str, scene_graph: str) -> list[dict[str, Any]]:
+    """Build a fresh image chat that carries the scene graph as text context."""
+    user_text = (
+        f"{token}\nPrompt: {prompt}\n\n"
+        f"Scene graph generated in the previous step:\n{scene_graph}\n\n"
+        f"{IQA_DECOMPOSITION_PROMPT}"
+    )
+    return [
+        {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": user_text}]},
+    ]
+
+
+def build_iqa_final_messages(token: str, prompt: str, scene_graph: str, decomposition: str) -> list[dict[str, Any]]:
+    """Build a fresh image chat that carries all IQA context and asks for JSON scores."""
+    user_text = (
+        f"{token}\nPrompt: {prompt}\n\n"
+        f"Scene graph generated earlier:\n{scene_graph}\n\n"
+        f"Object quality analysis generated earlier:\n{decomposition}\n\n"
+        f"{IQA_FINAL_PROMPT}"
+    )
+    return [
+        {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": user_text}]},
+    ]
+
+
 class DynEvalRunner:
     """Loads the DynEval checkpoint and runs the full T2IA-to-evaluation pipeline."""
 
@@ -252,6 +385,7 @@ class DynEvalRunner:
 
         self.model = Qwen3VLForConditionalGeneration.from_pretrained(model_ref, **load_kwargs).eval()
         self.t2ia_token = resolve_task_token(self.processor.tokenizer, "T2IA")
+        self.iqa_token = resolve_task_token(self.processor.tokenizer, "IQA")
         self.evaluation_token = resolve_task_token(self.processor.tokenizer, "EVALUATION")
 
     @property
@@ -284,10 +418,8 @@ class DynEvalRunner:
         input_width = inputs["input_ids"].shape[1]
         return self.processor.decode(generated[0, input_width:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-    def run(self, prompt: str, image_path: Path, args: argparse.Namespace) -> dict[str, Any]:
-        """Execute elements -> questions -> image scoring for one prompt/image pair."""
-        image = Image.open(image_path).convert("RGB")
-
+    def run_t2ia(self, prompt: str, image: Image.Image, args: argparse.Namespace) -> dict[str, Any]:
+        """Run the T2IA alignment flow: elements, questions, then 1-5 visual scores."""
         raw_elements = self.generate_text(build_element_messages(self.t2ia_token, prompt), args.max_new_tokens_elements)
         elements = parse_elements(raw_elements)
 
@@ -304,19 +436,74 @@ class DynEvalRunner:
         raw_answers = self.generate_image(build_evaluation_messages(self.evaluation_token, questions), image, args.max_new_tokens_answers)
         answers = parse_answers(raw_answers, questions)
 
-        result = {
-            "prompt": prompt,
-            "image_path": str(image_path),
+        return {
             "elements": elements,
             "questions": questions,
             "answers": answers,
+            "raw_elements": raw_elements,
+            "raw_questions": raw_questions,
+            "raw_answers": raw_answers,
         }
+
+    def run_iqa(self, prompt: str, image: Image.Image, args: argparse.Namespace) -> dict[str, Any]:
+        """Run the IQA flow: scene graph, object quality analysis, scored questions."""
+        raw_scene_graph = self.generate_image(
+            build_iqa_scene_graph_messages(self.iqa_token, prompt),
+            image,
+            args.max_new_tokens_iqa_scene_graph,
+        )
+        raw_decomposition = self.generate_image(
+            build_iqa_decomposition_messages(self.iqa_token, prompt, raw_scene_graph),
+            image,
+            args.max_new_tokens_iqa_decomposition,
+        )
+        raw_final = self.generate_image(
+            build_iqa_final_messages(self.iqa_token, prompt, raw_scene_graph, raw_decomposition),
+            image,
+            args.max_new_tokens_iqa_final,
+        )
+        parsed_final = parse_iqa_result(raw_final)
+
+        return {
+            "scene_graph": raw_scene_graph.strip(),
+            "object_quality_analysis": raw_decomposition.strip(),
+            "questions": parsed_final["questions"],
+            "score": parsed_final["score"],
+            "raw_final": raw_final,
+        }
+
+    def run(self, prompt: str, image_path: Path, args: argparse.Namespace) -> dict[str, Any]:
+        """Run the requested score pipeline for one prompt/image pair."""
+        image = Image.open(image_path).convert("RGB")
+
+        result = {
+            "prompt": prompt,
+            "image_path": str(image_path),
+        }
+        t2ia = None
+        iqa = None
+        if args.score_type in ("t2ia", "both"):
+            t2ia = self.run_t2ia(prompt, image, args)
+            result["elements"] = t2ia["elements"]
+            result["questions"] = t2ia["questions"]
+            result["answers"] = t2ia["answers"]
+        if args.score_type in ("iqa", "both"):
+            iqa = self.run_iqa(prompt, image, args)
+            result["iqa"] = {
+                "scene_graph": iqa["scene_graph"],
+                "object_quality_analysis": iqa["object_quality_analysis"],
+                "questions": iqa["questions"],
+                "score": iqa["score"],
+            }
         if args.hide_elements:
             result.pop("elements", None)
         if args.include_raw:
-            result["raw_elements"] = raw_elements
-            result["raw_questions"] = raw_questions
-            result["raw_answers"] = raw_answers
+            if t2ia is not None:
+                result["raw_elements"] = t2ia["raw_elements"]
+                result["raw_questions"] = t2ia["raw_questions"]
+                result["raw_answers"] = t2ia["raw_answers"]
+            if iqa is not None:
+                result["raw_iqa_final"] = iqa["raw_final"]
         return result
 
 
@@ -332,25 +519,44 @@ def format_result(result: dict[str, Any]) -> str:
         for idx, element in enumerate(elements, start=1):
             lines.append(f"  {idx}. {element}")
 
-    questions = result.get("questions", [])
-    lines.extend(["", f"Questions ({len(questions)})"])
-    for idx, item in enumerate(questions, start=1):
-        lines.append(f"  {idx}. {item.get('question', '')}")
-        if item.get("answer"):
-            lines.append(f"     ground-truth answer: {item['answer']}")
+    if "answers" in result:
+        questions = result.get("questions", [])
+        lines.extend(["", f"T2IA Questions ({len(questions)})"])
+        for idx, item in enumerate(questions, start=1):
+            lines.append(f"  {idx}. {item.get('question', '')}")
+            if item.get("answer"):
+                lines.append(f"     ground-truth answer: {item['answer']}")
 
-    answers = result.get("answers", [])
-    lines.extend(["", f"Evaluation Scores ({len(answers)})"])
-    valid_scores = []
-    for idx, item in enumerate(answers, start=1):
-        score = normalize_score(item.get("score"))
-        if 1 <= score <= 5:
-            valid_scores.append(score)
-        lines.append(f"  {idx}. score={score} | {item.get('question', '')}")
-        if item.get("reasoning"):
-            lines.append(f"     reasoning: {item['reasoning']}")
-    if valid_scores:
-        lines.append(f"  Mean score: {sum(valid_scores) / len(valid_scores):.3f}")
+        answers = result.get("answers", [])
+        lines.extend(["", f"T2IA Evaluation Scores ({len(answers)})"])
+        valid_scores = []
+        for idx, item in enumerate(answers, start=1):
+            score = normalize_score(item.get("score"))
+            if 1 <= score <= 5:
+                valid_scores.append(score)
+            lines.append(f"  {idx}. score={score} | {item.get('question', '')}")
+            if item.get("reasoning"):
+                lines.append(f"     reasoning: {item['reasoning']}")
+        if valid_scores:
+            lines.append(f"  T2IA score: {sum(valid_scores) / len(valid_scores):.3f} / 5")
+
+    iqa = result.get("iqa")
+    if isinstance(iqa, dict):
+        lines.extend(["", "IQA Scene Graph", str(iqa.get("scene_graph", "")).strip()])
+        lines.extend(["", "IQA Object Quality Analysis", str(iqa.get("object_quality_analysis", "")).strip()])
+        iqa_questions = iqa.get("questions", [])
+        lines.extend(["", f"IQA Questions ({len(iqa_questions) if isinstance(iqa_questions, list) else 0})"])
+        if isinstance(iqa_questions, list):
+            for idx, item in enumerate(iqa_questions, start=1):
+                if isinstance(item, dict):
+                    lines.append(f"  {idx}. score={normalize_iqa_score(item.get('score')):.3f} / 5 | {item.get('question', '')}")
+                    if item.get("target_answer") or item.get("answer"):
+                        lines.append(f"     target: {item.get('target_answer', '')} | answer: {item.get('answer', '')}")
+                    if item.get("reasoning"):
+                        lines.append(f"     reasoning: {item['reasoning']}")
+                else:
+                    lines.append(f"  {idx}. {item}")
+        lines.extend(["", f"IQA score: {normalize_iqa_score(iqa.get('score')):.3f} / 5"])
     lines.append("=" * 88)
     return "\n".join(lines)
 
@@ -358,9 +564,17 @@ def format_result(result: dict[str, Any]) -> str:
 def parse_args() -> argparse.Namespace:
     """Parse command-line options for local or Hugging Face inference."""
     parser = argparse.ArgumentParser(description="Run DynEval Evaluator inference from local or Hugging Face weights.")
-    parser.add_argument("--checkpoint", type=str, default=None, help="Local checkpoint path. If set, this overrides --variant/--repo-id.")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Local checkpoint path. If set, this overrides --variant/--model-size and --repo-id.")
     parser.add_argument("--repo-id", type=str, default=HF_REPO_ID, help="Hugging Face repo id used when --checkpoint is not set.")
-    parser.add_argument("--variant", choices=["2b", "4b"], default="2b", help="HF model variant to load from the repo.")
+    parser.add_argument(
+        "--variant",
+        "--model-size",
+        dest="variant",
+        choices=["2b", "4b"],
+        default="4b",
+        help="HF model variant to load from the repo when --checkpoint is not set.",
+    )
+    parser.add_argument("--score-type", choices=["t2ia", "iqa", "both"], default="both", help="Which score to compute. Default computes both T2IA and IQA.")
     parser.add_argument("--prompt", type=str, required=True, help="Text-to-image prompt for the image.")
     parser.add_argument("--image", type=Path, required=True, help="Image path to evaluate.")
     parser.add_argument("--output-file", type=Path, default=None, help="Optional JSON output path.")
@@ -369,6 +583,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-new-tokens-elements", type=int, default=256)
     parser.add_argument("--max-new-tokens-questions", type=int, default=256)
     parser.add_argument("--max-new-tokens-answers", type=int, default=768)
+    parser.add_argument("--max-new-tokens-iqa-scene-graph", type=int, default=512)
+    parser.add_argument("--max-new-tokens-iqa-decomposition", type=int, default=768)
+    parser.add_argument("--max-new-tokens-iqa-final", type=int, default=512)
     parser.add_argument("--hide-elements", action="store_true", help="Hide intermediate elements from terminal and saved JSON.")
     parser.add_argument("--include-raw", action="store_true", help="Include raw model responses in saved JSON.")
     return parser.parse_args()
