@@ -335,6 +335,11 @@ Use an environment with a recent Qwen3-VL-compatible version of `transformers`:
 pip install torch transformers accelerate pillow
 ```
 
+If the Hugging Face model requires access approval, accept it on the [model page](https://huggingface.co/vcl-iisc/DynEval-Evaluator) and then log in:
+
+```bash
+huggingface-cli login
+```
 
 Run the following commands from the repository root (the directory containing `run_inference.py`).
 
@@ -416,7 +421,12 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
 - `--hide-elements`: hide extracted elements from the terminal and saved JSON.
 - `--include-raw`: include raw model responses in the saved JSON.
 
+### Notes
 
+- For the best reproducibility, use the exact text prompt associated with the evaluated image.
+- The script adds the DynEval task tokens internally; do not add `<|T2IA|>` or `<|EVALUATION|>` to `--prompt`.
+- The Hugging Face repository stores the variants in the `DynEval-2B` and `DynEval-4B` subfolders.
+- `--output-file` is optional. The formatted result is always printed to the terminal.
 
 ## Quantitative Results
 
@@ -462,3 +472,17 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
 </p>
 
 ---
+
+## Citation
+
+```bibtex
+@misc{marjit2026dynevalholisticevaluationst2i,
+      title={DynEval: Holistic Evaluations of T2I Generative Models in the Wild},
+      author={Shyam Marjit and Dheeraj Baiju and Anuj Shikarkhane and Akhil Sakthieswaran and Sayak Paul and Anirban Chakraborty},
+      year={2026},
+      eprint={2607.11199},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2607.11199},
+}
+```
