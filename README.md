@@ -126,18 +126,32 @@ The tokenizer is initialized with three task tokens:
 
 #### 4b — SFT Annotation Format
 
-Each training row is a JSON object with a `messages` field in Qwen chat format.
+Training data is stored as JSONL. Each line is one sample with a `messages` list. The task token is placed in the user message, and the assistant message contains the target output.
 
-**`<T2IA>` element extraction or question generation:**
+**`<T2IA>` element extraction:**
 
 ```json
 {
   "id": "sample_id",
   "task": "t2ia_element_extraction",
   "messages": [
-    {"role": "system", "content": [{"type": "text", "text": "..."}]},
+    {"role": "system", "content": [{"type": "text", "text": "Extract important image-generation elements from the prompt."}]},
     {"role": "user", "content": [{"type": "text", "text": "<T2IA>\nPrompt: a photo of a carrot\nElements:"}]},
     {"role": "assistant", "content": [{"type": "text", "text": "[\"carrot (food)\"]"}]}
+  ]
+}
+```
+
+**`<T2IA>` question generation:**
+
+```json
+{
+  "id": "sample_id",
+  "task": "t2ia_single_question",
+  "messages": [
+    {"role": "system", "content": [{"type": "text", "text": "Generate one yes/no question for the given prompt element."}]},
+    {"role": "user", "content": [{"type": "text", "text": "<T2IA>\nDescription: a photo of a carrot\nElement: carrot (food)"}]},
+    {"role": "assistant", "content": [{"type": "text", "text": "{\"question\": \"Is there a carrot in the photo?\", \"answer\": \"yes\"}"}]}
   ]
 }
 ```
@@ -171,7 +185,7 @@ Each training row is a JSON object with a `messages` field in Qwen chat format.
   "task": "evaluation",
   "image_path": "/path/to/image.png",
   "messages": [
-    {"role": "system", "content": [{"type": "text", "text": "..."}]},
+    {"role": "system", "content": [{"type": "text", "text": "Score each question using visual evidence from the image."}]},
     {
       "role": "user",
       "content": [
@@ -184,7 +198,7 @@ Each training row is a JSON object with a `messages` field in Qwen chat format.
 }
 ```
 
-Do not put the task token in the assistant response. The task token should appear in the user instruction.
+Do not put task tokens in assistant responses.
 
 #### 4c — Build SFT Data
 
