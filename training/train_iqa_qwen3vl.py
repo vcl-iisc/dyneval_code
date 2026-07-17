@@ -1,32 +1,4 @@
-#!/usr/bin/env python3
-"""Train Qwen3-VL on the DynEval <IQA> task.
-
-The companion script train_qwen3vl_t2ia.py trains the <T2IA> and <EVALUATION>
-tasks. This script adds training for the third task token, <IQA>, which powers the
-three-step image-quality-assessment pipeline used at inference time
-(see inference/run-inference.py):
-
-  1. Scene graph generation  -> assistant emits {"nodes": [...], "edges": [...]}
-  2. Node-grounded questions -> assistant emits {"questions": [{node_id, question, target_answer}]}
-  3. Per-question scoring     -> assistant emits {"questions": [{question, target_answer, answer, score, reasoning}]}
-
-Every step is image-conditioned and prefixed with the <IQA> task token, exactly
-matching the message layout the inference script feeds to the model.
-
-Normal usage:
-  1. Build data/sft/<dataset_name>/train.jsonl and val.jsonl from teacher outputs:
-       python training/train_iqa_qwen3vl.py --prepare-only \
-         --scene-graph-dir /path/to/iqa_outputs \
-         --answers-dir /path/to/iqa_answers \
-         --images-root /path/to/images \
-         --data-dir data/sft/my_iqa_sft_data
-  2. Train from the prepared directory:
-       python training/train_iqa_qwen3vl.py --train-only --data-dir data/sft/my_iqa_sft_data
-"""
-
-
 from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -50,9 +22,6 @@ DEFAULT_MODEL_BY_SIZE = {
 DEFAULT_DATA_DIR = Path("data/sft/qwen3vl_iqa_dyneval_sft_data")
 DEFAULT_OUTPUT_DIR = Path("checkpoints/final/qwen3vl-iqa-dyneval")
 
-# The prompt strings below are copied verbatim from inference/run-inference.py so
-# the assistant targets learned here match exactly what the model is asked for at
-# inference time. Do not edit one without updating the other.
 
 IQA_SCENE_GRAPH_PROMPT = """Here is an image generated for this prompt "{prompt}".
 Now generate a scene graph by considering only the image. Consider the text prompt for your reference.
@@ -61,9 +30,12 @@ Return only valid JSON with exactly these keys: "nodes" and "edges".
 "edges" must be an array of relationships, where each relationship has "source", "relation", and "target".
 Do not write markdown, bullets, or prose."""
 
-IQA_DECOMPOSITION_PROMPT = """We are doing an image quality assessment. We have already done the text-to-image alignment, so you don't need to generate questions to check the alignment. To assess the quality of each object in the image, decompose each object into its respective part-label object attributes and evaluate each segment individually with respect to several objectives, such as shape, distortions, 3D spatial relationships, texture, etc.
-Generate yes/no questions with target answers.
-Use the provided scene-graph JSON nodes and edges directly.
+IQA_DECOMPOSITION_PROMPT = """We are doing an image quality assessment. The generated image is provided to you along with a list of object nodes JSON.
+We have ALREADY done the text-to-image alignment. Therefore you must NOT ask presence, attribute, color, count, or alignment questions (for example: "Is there a bench?", "Is the bench wooden?", "Are the flowers red?", "Is the wall white?"). Such questions are forbidden.
+Instead, for each object node, decompose it into its parts and generate yes/no questions that judge ONLY the rendering QUALITY of how that object is drawn in the image. Focus on perceptual defects such as: shape correctness and geometry, structural distortions or deformities, unnatural or broken proportions, blur or smearing, texture artifacts, melting/warping, incorrect or impossible 3D spatial structure, and boundary/edge coherence.
+Each question must be phrased so that a well-rendered, high-quality object gets the target answer "yes".
+Examples of the required style: "Are the bench slats straight and free of distortion?", "Are the flower petals rendered with clean edges and no smearing?", "Does the wall surface have a consistent texture without artifacts?".
+Inspect the provided image to decide the target answer.
 Return only valid JSON with exactly one key: "questions".
 Each question object must contain "node_id", "question", and "target_answer".
 Do not write markdown, bullets, or prose."""
@@ -242,9 +214,17 @@ def scene_graph_messages(prompt: str, scene_graph: dict[str, Any]) -> list[dict[
 
 
 def question_messages(prompt: str, scene_graph: dict[str, Any], questions: list[dict[str, str]]) -> list[dict[str, Any]]:
+    # Match inference: pass only node ids and labels (no attributes/edges) so the
+    # model learns to generate quality questions rather than re-verify attributes.
+    raw_nodes = scene_graph.get("nodes", []) if isinstance(scene_graph, dict) else []
+    nodes = [
+        {"node_id": str(node.get("id", "")), "label": str(node.get("label", ""))}
+        for node in raw_nodes
+        if isinstance(node, dict) and str(node.get("label", "")).strip()
+    ]
     user_text = (
         f"{IQA_TOKEN}\nPrompt: {prompt}\n\n"
-        f"Scene graph JSON:\n{json_dumps(scene_graph)}\n\n"
+        f"Object nodes JSON:\n{json_dumps(nodes)}\n\n"
         f"{IQA_DECOMPOSITION_PROMPT}"
     )
     return [

@@ -21,9 +21,12 @@ Return only valid JSON with exactly these keys: "nodes" and "edges".
 "edges" must be an array of relationships, where each relationship has "source", "relation", and "target".
 Do not write markdown, bullets, or prose."""
 
-IQA_DECOMPOSITION_PROMPT = """We are doing an image quality assessment. We have already done the text-to-image alignment, so you don't need to generate questions to check the alignment. To assess the quality of each object in the image, decompose each object into its respective part-label object attributes and evaluate each segment individually with respect to several objectives, such as shape, distortions, 3D spatial relationships, texture, etc.
-Generate yes/no questions with target answers.
-Use the provided scene-graph JSON nodes and edges directly.
+IQA_DECOMPOSITION_PROMPT = """We are doing an image quality assessment. The generated image is provided to you along with a list of object nodes JSON.
+We have ALREADY done the text-to-image alignment. Therefore you must NOT ask presence, attribute, color, count, or alignment questions (for example: "Is there a bench?", "Is the bench wooden?", "Are the flowers red?", "Is the wall white?"). Such questions are forbidden.
+Instead, for each object node, decompose it into its parts and generate yes/no questions that judge ONLY the rendering QUALITY of how that object is drawn in the image. Focus on perceptual defects such as: shape correctness and geometry, structural distortions or deformities, unnatural or broken proportions, blur or smearing, texture artifacts, melting/warping, incorrect or impossible 3D spatial structure, and boundary/edge coherence.
+Each question must be phrased so that a well-rendered, high-quality object gets the target answer "yes".
+Examples of the required style: "Are the bench slats straight and free of distortion?", "Are the flower petals rendered with clean edges and no smearing?", "Does the wall surface have a consistent texture without artifacts?".
+Inspect the provided image to decide the target answer.
 Return only valid JSON with exactly one key: "questions".
 Each question object must contain "node_id", "question", and "target_answer".
 Do not write markdown, bullets, or prose."""
@@ -167,9 +170,17 @@ def scene_graph_messages(prompt: str, scene_graph: dict[str, Any]) -> list[dict[
 
 
 def question_messages(prompt: str, scene_graph: dict[str, Any], questions: list[dict[str, str]]) -> list[dict[str, Any]]:
+    # Match inference: pass only node ids and labels (no attributes/edges) so the
+    # model learns to generate quality questions rather than re-verify attributes.
+    raw_nodes = scene_graph.get("nodes", []) if isinstance(scene_graph, dict) else []
+    nodes = [
+        {"node_id": str(node.get("id", "")), "label": str(node.get("label", ""))}
+        for node in raw_nodes
+        if isinstance(node, dict) and str(node.get("label", "")).strip()
+    ]
     user_text = (
         f"{IQA_TOKEN}\nPrompt: {prompt}\n\n"
-        f"Scene graph JSON:\n{json_dumps(scene_graph)}\n\n"
+        f"Object nodes JSON:\n{json_dumps(nodes)}\n\n"
         f"{IQA_DECOMPOSITION_PROMPT}"
     )
     return [
