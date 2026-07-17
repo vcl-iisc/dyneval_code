@@ -20,6 +20,7 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
     - [4c — Build SFT Data](#4c--build-sft-data)
     - [4d — Run Training](#4d--run-training)
     - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
+    - [4f — Train the IQA Task](#4f--train-the-iqa-task)
 - [Inference](#inference)
   - [Run DynEval-4B from Hugging Face](#run-dyneval-4b-from-hugging-face)
   - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
@@ -113,7 +114,7 @@ The teacher model uses natural-language prompts only. The student DynEval model 
 Train DynEval-2B or DynEval-4B with:
 
 ```text
-training/train_qwen3vl_dyneval.py
+training/train_t2ia_qwen3vl.py
 ```
 
 The trainer expects a prepared SFT data directory:
@@ -182,26 +183,27 @@ This task is also prompt-only. It trains the model to generate one yes/no verifi
 }
 ```
 
-**`<IQA>` image-quality question generation:**
+**`<IQA>` three-step image-quality assessment**
+
+The `<IQA>` task is trained by a separate script, `training/train_iqa_qwen3vl.py`, because it uses a three-step, image-conditioned pipeline (see [Inference](#inference)). Each image produces up to three rows, all prefixed with the `<IQA>` token, and each assistant target matches exactly what the inference script asks for at that step.
+
+1. **Scene graph** (`task: "IQA_scene_graph"`) — image + prompt → `{"nodes": [...], "edges": [...]}`.
 
 ```json
 {
-  "id": "sample_id",
-  "task": "iqa_question_generation",
+  "id": "sample_id_iqa_scene_graph",
+  "task": "IQA_scene_graph",
   "image_path": "/path/to/image.png",
   "messages": [
-    {"role": "system", "content": [{"type": "text", "text": "..."}]},
-    {
-      "role": "user",
-      "content": [
-        {"type": "image"},
-        {"type": "text", "text": "<IQA>\nGenerate image-quality assessment questions for visible artifacts, distortions, texture, shape consistency, and spatial quality."}
-      ]
-    },
-    {"role": "assistant", "content": [{"type": "text", "text": "[{\"question\": \"Are object shapes visually coherent?\", \"answer\": \"yes\"}]"}]}
+    {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "<IQA>\nHere is an image generated for this prompt \"a photo of a bench\". ..."}]},
+    {"role": "assistant", "content": [{"type": "text", "text": "{\"nodes\": [{\"id\": \"object_1\", \"label\": \"bench\", \"attributes\": [\"wooden\"]}], \"edges\": [{\"source\": \"object_1\", \"relation\": \"on\", \"target\": \"object_2\"}]}"}]}
   ]
 }
 ```
+
+2. **Node-grounded questions** (`task: "IQA_question_generation"`) — image + prompt + scene graph JSON → `{"questions": [{node_id, question, target_answer}]}`.
+
+3. **Per-question scoring** (`task: "IQA_evaluation"`) — image + prompt + scene graph + question JSON → `{"questions": [{question, target_answer, answer, score, reasoning}]}`, where each `score` is 1–5.
 
 **`<EVALUATION>` image scoring**
 
@@ -235,18 +237,18 @@ Do not put task tokens in assistant responses.
 
 #### 4c — Build SFT Data
 
-Use `data/build_dyneval_sft.py` to convert teacher-generated question/answer files into SFT JSONL.
+**T2IA and EVALUATION.** Use `data/build_t2ia_sft.py` to convert teacher-generated question/answer files into SFT JSONL for the `<T2IA>` and `<EVALUATION>` tasks.
 
 Expected inputs:
 
-- `--questions-dir`: JSON files containing prompt-level elements, T2IA questions, and/or IQA questions
+- `--questions-dir`: JSON files containing prompt-level elements and T2IA questions
 - `--answers-dir`: JSON files containing image paths and question scores
 - `--images-root`: root folder used to resolve image paths
 
 Example:
 
 ```bash
-python data/build_dyneval_sft.py \
+python data/build_t2ia_sft.py \
   --questions-dir /path/to/questions \
   --answers-dir /path/to/answers \
   --images-root /path/to/images \
@@ -263,21 +265,44 @@ data/sft/my_dyneval_sft_data/val.jsonl
 data/sft/my_dyneval_sft_data/manifest.json
 ```
 
-The generated SFT data can include rows for:
+This produces rows for:
 
 - `<T2IA>` element extraction
 - `<T2IA>` single-question generation
-- `<IQA>` image-quality question generation
 - `<EVALUATION>` image scoring
+
+**IQA.** The `<IQA>` task uses a separate builder, `data/build_iqa_sft.py`, which reads the teacher IQA outputs (from `Distill Annotations/IQA/`):
+
+- `--scene-graph-dir`: teacher scene-graph/question JSON files (`iqa_outputs/`)
+- `--answers-dir`: teacher answer JSON files (`iqa_answers/`); optional, enables the scoring rows
+- `--images-root`: root folder used to resolve image paths
+
+```bash
+python data/build_iqa_sft.py \
+  --scene-graph-dir /path/to/iqa_outputs \
+  --answers-dir /path/to/iqa_answers \
+  --images-root /path/to/images \
+  --output-dir data/sft/my_iqa_sft_data \
+  --val-ratio 0.05 \
+  --seed 42
+```
+
+This produces rows for:
+
+- `<IQA>` scene graph generation
+- `<IQA>` node-grounded question generation
+- `<IQA>` per-question scoring
+
+The same builder is also available inline via `training/train_iqa_qwen3vl.py --prepare-only`.
 
 #### 4d — Run Training
 
-Use `--finetune-mode full` for full-parameter training.
+Use `--finetune-mode full` for full-parameter training. `train_t2ia_qwen3vl.py` trains the `<T2IA>` and `<EVALUATION>` tasks; the `<IQA>` task is trained separately in [4f](#4f--train-the-iqa-task).
 
 **DynEval-2B:**
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_qwen3vl_dyneval.py \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_t2ia_qwen3vl.py \
   --train-only \
   --finetune-mode full \
   --model-path /path/to/qwen3vl-2b-checkpoint \
@@ -304,7 +329,7 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_qwen3vl_dyne
 **DynEval-4B:**
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_qwen3vl_dyneval.py \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_t2ia_qwen3vl.py \
   --train-only \
   --finetune-mode full \
   --model-path /path/to/qwen3vl-4b-checkpoint \
@@ -327,6 +352,39 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_qwen3vl_dyne
   --max-length 4096 \
   --report-to none
 ```
+
+#### 4f — Train the IQA Task
+
+The `<IQA>` task is trained with `training/train_iqa_qwen3vl.py`. It uses the same trainer machinery and task tokens, but its data covers the three image-conditioned IQA steps (scene graph, node-grounded questions, per-question scoring).
+
+Start from a checkpoint that already has `<T2IA>` and `<EVALUATION>` trained, so the resulting model supports all three tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_iqa_qwen3vl.py \
+  --train-only \
+  --finetune-mode full \
+  --model-path checkpoints/final/qwen3vl-4b-dyneval-new-v1 \
+  --data-dir data/sft/my_iqa_sft_data \
+  --output-dir checkpoints/final/qwen3vl-4b-dyneval-iqa-v1 \
+  --device-map none \
+  --gradient-checkpointing \
+  --ddp-find-unused-parameters \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --epochs 1 \
+  --lr 1e-7 \
+  --lr-scheduler-type cosine \
+  --warmup-ratio 0.03 \
+  --optim adafactor \
+  --eval-steps 500 \
+  --save-steps 1000000 \
+  --logging-steps 20 \
+  --dataloader-num-workers 4 \
+  --max-length 4096 \
+  --report-to none
+```
+
+Per-question 1–5 scores are derived from the teacher's judgement with `--score-mode`: `correct` (default) maps correct/incorrect answers to 5/1, while `overall` uses the teacher's single overall score for every question.
 
 ---
 

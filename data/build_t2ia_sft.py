@@ -208,7 +208,7 @@ def split_rows(rows: list[dict[str, Any]], val_ratio: float, seed: int) -> tuple
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build DynEval SFT JSONL from question/answer folders.")
+    parser = argparse.ArgumentParser(description="Build DynEval <T2IA> and <EVALUATION> SFT JSONL from question/answer folders.")
     parser.add_argument("--questions-dir", type=Path, required=True)
     parser.add_argument("--answers-dir", type=Path, required=True)
     parser.add_argument("--images-root", type=Path, required=True)

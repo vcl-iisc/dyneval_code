@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train Qwen3-VL on DynEval-style SFT JSONL data.
+"""Train Qwen3-VL on the DynEval <T2IA> and <EVALUATION> SFT JSONL data.
 
 Normal usage is:
   1. Build data/sft/<dataset_name>/train.jsonl and val.jsonl.
@@ -7,7 +7,9 @@ Normal usage is:
 
 The script can also prepare SFT JSONL from a source JSON for simple experiments,
 but public/reproducible runs should prefer the explicit data-building script in
-data/build_dyneval_sft.py.
+data/build_t2ia_sft.py.
+
+The <IQA> task is trained separately by training/train_iqa_qwen3vl.py.
 """
 
 
@@ -29,7 +31,10 @@ TASK_TOKENS = ["<T2IA>", "<IQA>", "<EVALUATION>"]
 T2IA_TOKEN = "<T2IA>"
 EVALUATION_TOKEN = "<EVALUATION>"
 
-DEFAULT_MODEL = Path("checkpoints/base/QWEN3-VL-4B-INSTRUCT-MODEL")
+DEFAULT_MODEL_BY_SIZE = {
+    "2b": "Qwen/Qwen3-VL-2B-Instruct",
+    "4b": "Qwen/Qwen3-VL-4B-Instruct",
+}
 DEFAULT_SOURCE_JSON = None
 DEFAULT_IMAGE_ROOT = Path("data/images")
 DEFAULT_DATA_DIR = Path("data/sft/example_dyneval_sft_data")
@@ -760,7 +765,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-ratio", type=float, default=0.02)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--model-size", choices=["2b", "4b"], default="4b", help="Original Qwen3-VL checkpoint size to use when --model-path is not provided.")
+    parser.add_argument("--model-path", type=str, default=None, help="Model path or Hugging Face repo id. Overrides --model-size.")
     parser.add_argument("--train-file", type=Path, default=None)
     parser.add_argument("--val-file", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -835,7 +841,7 @@ def main() -> None:
     if not args.train_only and args.source_json is None:
         raise SystemExit(
             "Missing --source-json for in-script data preparation. "
-            "For normal public-repo usage, first build data with data/build_dyneval_sft.py "
+            "For normal public-repo usage, first build data with data/build_t2ia_sft.py "
             "and then run this script with --train-only --data-dir <sft_dir>."
         )
 
@@ -856,6 +862,8 @@ def main() -> None:
         args.train_file = args.data_dir / "train.jsonl"
     if val_file_was_default:
         args.val_file = args.data_dir / "val.jsonl"
+    if args.model_path is None:
+        args.model_path = DEFAULT_MODEL_BY_SIZE[args.model_size]
     if args.finetune_mode == "full" and args.output_dir == DEFAULT_OUTPUT_DIR:
         args.output_dir = DEFAULT_FULL_OUTPUT_DIR
 
