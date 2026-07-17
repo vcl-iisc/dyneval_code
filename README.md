@@ -111,10 +111,11 @@ The teacher model uses natural-language prompts only. The student DynEval model 
 
 ### Step 4 — Training
 
-Train DynEval-2B or DynEval-4B with:
+Train DynEval-2B or DynEval-4B for T2IA and IQA with:
 
 ```text
 training/train_t2ia_qwen3vl.py
+training/train_iqa_qwen3vl.py
 ```
 
 The trainer expects a prepared SFT data directory:
