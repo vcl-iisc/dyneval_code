@@ -358,7 +358,36 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_t2ia_qwen3vl
 
 The `<IQA>` task is trained with `training/train_iqa_qwen3vl.py`. It uses the same trainer machinery and task tokens, but its data covers the three image-conditioned IQA steps (scene graph, node-grounded questions, per-question scoring).
 
-Start from a checkpoint that already has `<T2IA>` and `<EVALUATION>` trained, so the resulting model supports all three tasks:
+Start from a checkpoint that already has `<T2IA>` and `<EVALUATION>` trained, so the resulting model supports all three tasks.
+
+**DynEval-2B:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_iqa_qwen3vl.py \
+  --train-only \
+  --finetune-mode full \
+  --model-path checkpoints/final/qwen3vl-2b-dyneval-new-v1 \
+  --data-dir data/sft/my_iqa_sft_data \
+  --output-dir checkpoints/final/qwen3vl-2b-dyneval-iqa-v1 \
+  --device-map none \
+  --gradient-checkpointing \
+  --ddp-find-unused-parameters \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --epochs 1 \
+  --lr 1e-7 \
+  --lr-scheduler-type cosine \
+  --warmup-ratio 0.03 \
+  --optim adafactor \
+  --eval-steps 500 \
+  --save-steps 1000000 \
+  --logging-steps 20 \
+  --dataloader-num-workers 4 \
+  --max-length 4096 \
+  --report-to none
+```
+
+**DynEval-4B:**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 training/train_iqa_qwen3vl.py \

@@ -207,7 +207,36 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29512 trainin
 
 ## Full Fine-Tuning IQA
 
-Train the `<IQA>` task with `train_iqa_qwen3vl.py`. Start from a checkpoint that already has `<T2IA>` and `<EVALUATION>` trained so the resulting model supports all three tasks:
+Train the `<IQA>` task with `train_iqa_qwen3vl.py`. Start from a checkpoint that already has `<T2IA>` and `<EVALUATION>` trained so the resulting model supports all three tasks.
+
+**2B:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29513 training/train_iqa_qwen3vl.py \
+  --train-only \
+  --finetune-mode full \
+  --model-path checkpoints/final/qwen3vl-2b-dyneval-new-v1 \
+  --data-dir data/sft/my_iqa_sft_data \
+  --output-dir checkpoints/final/qwen3vl-2b-dyneval-iqa-v1 \
+  --device-map none \
+  --gradient-checkpointing \
+  --ddp-find-unused-parameters \
+  --per-device-train-batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --epochs 1 \
+  --lr 1e-7 \
+  --lr-scheduler-type cosine \
+  --warmup-ratio 0.03 \
+  --optim adafactor \
+  --eval-steps 500 \
+  --save-steps 1000000 \
+  --logging-steps 20 \
+  --dataloader-num-workers 4 \
+  --max-length 4096 \
+  --report-to none
+```
+
+**4B:**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=29513 training/train_iqa_qwen3vl.py \
