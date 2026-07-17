@@ -64,21 +64,11 @@ Clone the repository and install dependencies using the provided `requirements.t
 The dependencies follow the same requirements as the official [Qwen3-VL](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) installation.
 
 ```bash
-git clone https://github.com/vcl-iisc/DynEval.git
-cd DynEval/dyneval_code
+git clone https://github.com/vcl-iisc/dyneval_code
 pip install -r requirements.txt
 ```
 
-If the Hugging Face model requires access approval, accept it on the [model page](https://huggingface.co/vcl-iisc/DynEval-Evaluator) and then log in:
 
-```bash
-huggingface-cli login
-```
-
-> **Note:** `peft` is only required for training. For inference only, you can skip it:
-> ```bash
-> pip install torch==2.11.0 torchvision==0.26.0 transformers==5.12.1 accelerate==1.14.0 pillow==11.3.0
-> ```
 
 ---
 
