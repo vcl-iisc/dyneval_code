@@ -9,6 +9,7 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
 ## Table of Contents
 
 - [Main Contributions](#main-contributions)
+- [Installation](#installation)
 - [Dataset Construction and Training](#dataset-construction-and-training)
   - [Step 1 — Filter Diverse Prompts](#step-1--filter-diverse-prompts)
   - [Step 2 — Generate Images](#step-2--generate-images)
@@ -20,7 +21,6 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
     - [4d — Run Training](#4d--run-training)
     - [4e — Logging and Checkpoints](#4e--logging-and-checkpoints)
 - [Inference](#inference)
-  - [Install Dependencies](#install-dependencies)
   - [Run DynEval-4B from Hugging Face](#run-dyneval-4b-from-hugging-face)
   - [Run DynEval-2B from Hugging Face](#run-dyneval-2b-from-hugging-face)
   - [Choose Score Type](#choose-score-type)
@@ -54,6 +54,31 @@ Shyam Marjit, Dheeraj Baiju, Anuj Shikarkhane, Akhil Sakthieswaran, Sayak Paul, 
   <br>
   <em>Overview of DynEvalInstruct construction and the DynEval evaluation framework.</em>
 </p>
+
+---
+
+## Installation
+
+Clone the repository and install dependencies using the provided `requirements.txt`. A CUDA-capable GPU is required.
+
+The dependencies follow the same requirements as the official [Qwen3-VL](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) installation.
+
+```bash
+git clone https://github.com/vcl-iisc/DynEval.git
+cd DynEval/dyneval_code
+pip install -r requirements.txt
+```
+
+If the Hugging Face model requires access approval, accept it on the [model page](https://huggingface.co/vcl-iisc/DynEval-Evaluator) and then log in:
+
+```bash
+huggingface-cli login
+```
+
+> **Note:** `peft` is only required for training. For inference only, you can skip it:
+> ```bash
+> pip install torch==2.11.0 torchvision==0.26.0 transformers==5.12.1 accelerate==1.14.0 pillow==11.3.0
+> ```
 
 ---
 
@@ -326,21 +351,17 @@ By default, the script loads **DynEval-4B** from Hugging Face and computes both 
 
 The script can also compute only one score with `--score-type t2ia` or `--score-type iqa`.
 
-### Install Dependencies
+#### T2IA pipeline (3 steps)
 
-Use an environment with a Qwen3-VL-compatible version of `transformers`:
+1. **Element extraction** — the model reads the text prompt and outputs a JSON list of important image-generation elements (objects, activities, attributes, etc.).
+2. **Question generation** — for each element, the model generates one yes/no verification question with a target answer.
+3. **Visual scoring** — the model looks at the image and scores each question from 1 (definitely no) to 5 (definitely yes). The T2IA score is the mean over all questions.
 
-```bash
-pip install torch transformers accelerate pillow
-```
+#### IQA pipeline (3 steps)
 
-If the Hugging Face model requires access approval, accept it on the [model page](https://huggingface.co/vcl-iisc/DynEval-Evaluator) and then log in:
-
-```bash
-huggingface-cli login
-```
-
-Run commands from the repository root.
+1. **Scene graph generation** — the model looks at the image (using the text prompt as a reference) and outputs a scene graph: a list of visible **nodes** (objects with attributes) and **edges** (spatial/relational links between them).
+2. **Node-grounded question generation** — using the scene graph nodes and edges, the model generates yes/no quality questions per node, targeting shape, texture, distortions, 3D spatial consistency, and other perceptual objectives.
+3. **Visual scoring** — the model answers and scores each question against the image from 1 to 5. The IQA score is the mean over all questions.
 
 ### Run DynEval-4B from Hugging Face
 
@@ -365,7 +386,7 @@ CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
 
 ### Choose Score Type
 
-Compute both scores, the default:
+Compute both scores (default):
 
 ```bash
 --score-type both
@@ -389,10 +410,16 @@ Example:
 CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
   --model-size 4b \
   --score-type iqa \
-  --prompt "a photo of a carrot" \
+  --prompt "a photo of a bench" \
   --image example.jpg \
   --output-file output_iqa.json
 ```
+
+
+
+
+
+When `--output-file` is provided, the script also saves the structured JSON result.
 
 ### Command-Line Arguments
 
@@ -406,20 +433,15 @@ CUDA_VISIBLE_DEVICES=0 python inference/run-inference.py \
 - `--dtype {bfloat16,float16,float32,auto}`: model precision; defaults to `bfloat16`.
 - `--device-map DEVICE_MAP`: model device placement; defaults to `auto`.
 - `--max-new-tokens-elements N`: T2IA element-extraction generation limit; defaults to `256`.
-- `--max-new-tokens-questions N`: T2IA question-generation limit; defaults to `256`.
-- `--max-new-tokens-answers N`: T2IA evaluation generation limit; defaults to `768`.
+- `--max-new-tokens-questions N`: T2IA per-element question-generation limit; defaults to `256`.
+- `--max-new-tokens-answers N`: T2IA visual scoring generation limit; defaults to `768`.
 - `--max-new-tokens-iqa-scene-graph N`: IQA scene-graph generation limit; defaults to `512`.
-- `--max-new-tokens-iqa-decomposition N`: IQA decomposition generation limit; defaults to `768`.
-- `--max-new-tokens-iqa-final N`: IQA scored-question generation limit; defaults to `512`.
+- `--max-new-tokens-iqa-questions N`: IQA node-grounded question-generation limit; defaults to `768`. (also accepted as `--max-new-tokens-iqa-decomposition`)
+- `--max-new-tokens-iqa-final N`: IQA visual scoring generation limit; defaults to `512`.
 - `--hide-elements`: hide extracted T2IA elements from terminal and saved JSON.
-- `--include-raw`: include raw model responses in the saved JSON.
+- `--include-raw`: include raw model responses in the saved JSON. Useful for debugging when scene graph nodes or questions appear empty.
 
-### Notes
 
-- For best reproducibility, use the exact prompt associated with the evaluated image.
-- Do not manually add `<|T2IA|>`, `<|IQA|>`, or `<|EVALUATION|>` to `--prompt`; the script adds task tokens internally.
-- The Hugging Face repository stores weights in the `DynEval-2B` and `DynEval-4B` subfolders.
-- `--output-file` is optional. The formatted result is always printed to the terminal.
 
 ## Quantitative Results
 
