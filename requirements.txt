@@ -1,12 +1,9 @@
-# Inference
-torch==2.11.0
-torchvision==0.26.0
-transformers==5.12.1
-accelerate==1.14.0
-pillow==11.3.0
-
-# Training only
-peft==0.19.1
+torch
+torchvision
+transformers
+accelerate
+pillow
+peft
 
 
 
