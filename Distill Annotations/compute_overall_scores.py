@@ -111,7 +111,7 @@ def write_csv(rows: list[dict], path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iqa-dir", type=Path, default=Path("iqa_answers"))
-    parser.add_argument("--t2ia-dir", type=Path, default=Path("model-responses/answers"))
+    parser.add_argument("--t2ia-dir", type=Path, default=Path("t2ia_answers"))
     parser.add_argument("--output-file", type=Path, default=Path("overall_scores.json"))
     parser.add_argument("--format", choices=("json", "csv"), default="json")
     parser.add_argument("--alpha", type=float, default=0.5)

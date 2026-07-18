@@ -1,27 +1,36 @@
 # Distill Annotations
 
-This folder contains teacher-VLM scripts for generating T2IA and IQA annotations, plus a builder that converts those outputs into **DynEvalInstruct** JSON for Step 4 fine-tuning.
+This folder contains the teacher-VLM scripts that generate T2IA and IQA annotations, plus builders that convert those outputs into fine-tuning data for Step 4.
+
+Annotation generation is done by **two self-contained scripts**:
+
+| Script | What it does |
+|--------|--------------|
+| `t2ia.py` | Extracts prompt elements, generates one yes/no question per element, then scores each question 1–5 against the image. |
+| `iqa.py`  | Builds a scene graph, generates rendering-quality yes/no questions per node, then answers/scores them 1–5 against the image. |
+
+Both scripts run the full generate-then-score pipeline in a single pass, mirroring the prompts in [`run_inference.py`](../run_inference.py) so the teacher produces annotations in the exact style the student learns.
 
 The teacher model is [`Qwen/Qwen3-VL-235B-A22B-Instruct`](https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct). The student DynEval model is trained with task tokens:
 
 | Token | Token ID | Used in |
 |-------|----------|---------|
-| `<\|T2IA\|>` | 151669 | Stage 1 question generation (prompt only) |
-| `<\|IQA\|>` | 151670 | Stage 2 scene-graph / quality-question generation |
-| `<\|EVALUATION\|>` | 151671 | Stage 1 and Stage 2 answering / scoring |
+| `<\|T2IA\|>` | 151669 | Element extraction / question generation (prompt only) |
+| `<\|IQA\|>` | 151670 | Scene-graph / quality-question generation |
+| `<\|EVALUATION\|>` | 151671 | Answering / 1–5 scoring |
 
-These tokens are **not** sent to the teacher VLM. They are added by `build_dynevalinstruct.py` when creating the fine-tuning JSON consumed in [Step 4](../README.md#step-4--fine-tune-dyneval).
+These tokens are **not** sent to the teacher VLM. They are added later by the SFT builders when creating the fine-tuning data consumed in [Step 4](../README.md#step-4--training).
 
 ## End-to-End Workflow
 
 ```text
 DYNEVAL-250K-PROMPTS.json
-  -> T2IA/question.py            -> T2IA questions
-  -> T2IA/answering.py           -> T2IA answers (1-5 scoring)
-  -> IQA/question.py             -> IQA scene graph + questions
-  -> IQA/answer.py               -> IQA answers (1-5 scoring)
-  -> build_dynevalinstruct.py    -> dynevalinstruct_t2ia.json + dynevalinstruct_iqa.json
-  -> Qwen3-VL fine-tuning        -> DynEval-2B / DynEval-4B
+  -> t2ia.py   -> t2ia_questions/  (elements + per-element questions)
+                  t2ia_answers/    (1-5 scores)
+  -> iqa.py    -> iqa_outputs/     (scene graph + quality questions)
+                  iqa_answers/     (1-5 scores)
+  -> build SFT data (see "Build Fine-tuning Data")
+  -> Qwen3-VL fine-tuning -> DynEval-2B / DynEval-4B
 ```
 
 ## Expected Input Format
@@ -36,19 +45,19 @@ The prompt mapping file must be a JSON object with a `prompts` list:
       "text_id": "000",
       "prompt": "statue of a man",
       "image_path": "DYNEVAL-250K-IMAGES/D250K-000001.png",
-      "questions_file": "model-responses/questions/D250K-000001.json",
-      "response_file": "model-responses/answers/D250K-000001.json",
       "generation_model": "unknown"
     }
   ]
 }
 ```
 
-Relative paths are resolved from:
+Relative paths (including `image_path`) are resolved from:
 
 1. The current working directory
 2. The script folder
 3. The repository root
+
+Use `--images-root` to point at the image directory when `image_path` is relative.
 
 ## Dependencies
 
@@ -69,22 +78,20 @@ Qwen/Qwen3-VL-235B-A22B-Instruct
 Qwen/Qwen3-VL-235B-A22B-Instruct-FP8
 ```
 
-With `--backend auto`, FP8 models use vLLM automatically. Non-FP8 models use Transformers.
+With `--backend auto`, FP8 models use vLLM automatically; non-FP8 models use Transformers.
 
 ## Common Arguments
 
-Most scripts support:
+Both scripts support:
 
 ```bash
 --annotations-file DYNEVAL-250K-PROMPTS.json
---questions-dir path/to/questions
 --images-root path/to/images
---output-dir path/to/outputs
 --model Qwen/Qwen3-VL-235B-A22B-Instruct
---backend auto
+--backend auto            # auto | transformers | vllm
 --start-idx 0
 --end-idx 10
---force
+--force                   # regenerate even if valid outputs already exist
 ```
 
 vLLM-related arguments:
@@ -95,197 +102,158 @@ vLLM-related arguments:
 --temperature 0.0
 ```
 
-## T2IA Workflow
+## T2IA: `t2ia.py`
 
-T2IA generates prompt-alignment yes/no questions and then answers those questions for each image.
+For each prompt the script:
 
-### 1. Generate T2IA Questions
-
-```bash
-python T2IA/question.py \
-  --annotations-file DYNEVAL-250K-PROMPTS.json \
-  --questions-dir model-responses/questions \
-  --start-idx 0 \
-  --end-idx 10
-```
-
-This script makes two teacher calls per prompt:
-
-1. Standard alignment yes/no questions with target answers
-2. Distortion-based yes/no questions with target answers
-
-If `--questions-dir` is not provided, it writes to each record's `questions_file` path from the prompt mapping JSON.
-
-### 2. Answer T2IA Questions
+1. Extracts the important visual elements from the prompt (each classified by type, e.g. `bench (object)`).
+2. Generates one yes/no verification question per element, with a target answer.
+3. Scores each question 1–5 by visual evidence (`5 = yes, definitely` … `1 = no, definitely`), looking only at the image.
 
 ```bash
-python T2IA/answering.py \
+python t2ia.py \
   --annotations-file DYNEVAL-250K-PROMPTS.json \
-  --questions-dir model-responses/questions \
   --images-root DYNEVAL-250K-IMAGES \
-  --output-dir model-responses/answers \
+  --questions-dir t2ia_questions \
+  --answers-dir t2ia_answers \
   --start-idx 0 \
   --end-idx 10
 ```
 
-This script loads each image and its generated questions, answers yes/no based on the image, compares against target answers, and saves per-question scores on a **1–5** scale.
+Outputs:
 
-## IQA Workflow
+- `--questions-dir/<pair_id>.json` — one entry per element:
 
-IQA generates image-quality questions using a scene graph first, then answers those questions with a 1–5 quality score.
+```json
+[
+  {"element": "bench (object)", "question": "Is there a bench in the photo?", "answer": "yes"}
+]
+```
 
-### 1. Generate IQA Questions
+- `--answers-dir/<pair_id>.json` — per-question 1–5 scores:
+
+```json
+{
+  "pair_id": "...",
+  "prompt": "...",
+  "image_path": "...",
+  "answers": [
+    {"question": "...", "element": "bench (object)", "target_answer": "yes", "reasoning": "...", "score": 5}
+  ]
+}
+```
+
+## IQA: `iqa.py`
+
+For each image the script:
+
+1. Generates a scene graph (`nodes` + `edges` only), using the prompt as reference.
+2. Passes the node ids and labels back and generates rendering-quality yes/no questions (presence/attribute/color/count/alignment questions are forbidden), each with a `node_id` and a `target_answer`.
+3. Answers each question from the image, marks correctness against the target, and produces an overall 1–5 quality score.
 
 ```bash
-python IQA/question.py \
+python iqa.py \
   --annotations-file DYNEVAL-250K-PROMPTS.json \
   --images-root DYNEVAL-250K-IMAGES \
   --output-dir iqa_outputs \
-  --questions-dir iqa_questions \
+  --answers-dir iqa_answers \
   --start-idx 0 \
   --end-idx 10
 ```
 
-This script makes two teacher calls per image:
+Outputs:
 
-1. Generate a scene graph from the image and prompt
-2. Generate yes/no quality questions with target answers from the scene graph
+- `--output-dir/<pair_id>.json` — scene graph + quality questions:
 
-The combined output is saved to `--output-dir`. If `--questions-dir` is provided, the generated yes/no questions are also saved separately there.
+```json
+{
+  "pair_id": "...",
+  "prompt": "...",
+  "scene_graph": {
+    "nodes": [{"id": "object_1", "label": "bench", "attributes": ["wooden"]}],
+    "edges": [{"source": "object_1", "relation": "on", "target": "object_2"}]
+  },
+  "questions": [
+    {"node_id": "object_1", "question": "Are the bench slats straight and free of distortion?", "target_answer": "yes"}
+  ]
+}
+```
 
-### 2. Answer IQA Questions
+- `--answers-dir/<pair_id>.json` — answers + overall quality score:
+
+```json
+{
+  "pair_id": "...",
+  "prompt": "...",
+  "answers": [
+    {"question": "...", "answer": "no", "target_answer": "yes", "correct": false, "reasoning": "..."}
+  ],
+  "score": 3
+}
+```
+
+`iqa.py` also exposes per-stage generation limits: `--scene-graph-max-new-tokens`, `--questions-max-new-tokens`, and `--answer-max-new-tokens`.
+
+## Running FP8 with vLLM
 
 ```bash
-python IQA/answer.py \
+python t2ia.py \
   --annotations-file DYNEVAL-250K-PROMPTS.json \
-  --questions-dir iqa_questions \
   --images-root DYNEVAL-250K-IMAGES \
-  --output-dir iqa_answers \
-  --start-idx 0 \
-  --end-idx 10
+  --questions-dir t2ia_questions \
+  --answers-dir t2ia_answers \
+  --model Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  --backend vllm \
+  --gpu-memory-utilization 0.70
 ```
 
-This script sends the prompt, image, and generated IQA yes/no questions to the teacher VLM. It answers each question and produces an overall quality score from 1 to 5.
+Set `--tensor-parallel-size` to control the number of GPUs. If omitted, the scripts use the detected CUDA GPU count.
 
-## Build DynEvalInstruct for Fine-tuning
+## Resume Behavior
 
-After the teacher workflows finish, convert the outputs into curriculum JSON files for Step 4:
+Both scripts skip records whose question **and** answer outputs already exist and are valid. Use `--force` to regenerate. Use `--start-idx` / `--end-idx` for chunked or single-record runs:
+
+```bash
+python iqa.py --start-idx 0 --end-idx 1
+```
+
+Failed records write a `<pair_id>.error.txt` next to the answer output instead of stopping the run.
+
+## Build Fine-tuning Data
+
+After both scripts finish, build the SFT JSONL with the builders in [`../data`](../data):
+
+```bash
+python ../data/build_t2ia_sft.py \
+  --questions-dir t2ia_questions \
+  --answers-dir t2ia_answers \
+  --images-root DYNEVAL-250K-IMAGES \
+  --output-dir ../data/sft/my_dyneval_sft_data
+
+python ../data/build_iqa_sft.py \
+  --scene-graph-dir iqa_outputs \
+  --answers-dir iqa_answers \
+  --images-root DYNEVAL-250K-IMAGES \
+  --output-dir ../data/sft/my_iqa_sft_data
+```
+
+Alternatively, `build_dynevalinstruct.py` wraps the same teacher outputs into DynEvalInstruct conversation JSON:
 
 ```bash
 python build_dynevalinstruct.py \
   --annotations-file DYNEVAL-250K-PROMPTS.json \
-  --t2ia-questions-dir model-responses/questions \
-  --t2ia-answers-dir model-responses/answers \
+  --t2ia-questions-dir t2ia_questions \
+  --t2ia-answers-dir t2ia_answers \
   --iqa-outputs-dir iqa_outputs \
   --iqa-answers-dir iqa_answers \
   --output-t2ia dynevalinstruct_t2ia.json \
   --output-iqa dynevalinstruct_iqa.json
 ```
 
-This script wraps teacher outputs into Qwen-VL conversation samples:
+Human-turn templates are defined in `task_tokens.py`:
 
-| Output file | Human turn starts with | Notes |
-|-------------|------------------------|-------|
-| `dynevalinstruct_t2ia.json` | `<\|T2IA\|>` or `<\|EVALUATION\|>` | Stage 1 curriculum |
-| `dynevalinstruct_iqa.json` | `<\|IQA\|>` or `<\|EVALUATION\|>` | Stage 2 curriculum |
-
-Human-turn templates are defined in `task_tokens.py` and match the root [README Step 4](../README.md#4b--annotation-format):
-
-- `<\|T2IA\|>` samples are **prompt-only** and do not include an `image` field
-- `<\|IQA\|>` and `<\|EVALUATION\|>` samples include `"image": "..."` and start with `<image>` in the human turn
-
-Then point fine-tuning to the generated files:
-
-```bash
-export DYNEVALINSTRUCT_T2IA_ANNOTATION=/path/to/dynevalinstruct_t2ia.json
-export DYNEVALINSTRUCT_T2IA_DATA=/path/to/DYNEVAL-250K-IMAGES
-export DYNEVALINSTRUCT_IQA_ANNOTATION=/path/to/dynevalinstruct_iqa.json
-export DYNEVALINSTRUCT_IQA_DATA=/path/to/DYNEVAL-250K-IMAGES
-```
-
-## Running FP8 with vLLM
-
-```bash
-python T2IA/answering.py \
-  --annotations-file DYNEVAL-250K-PROMPTS.json \
-  --questions-dir model-responses/questions \
-  --images-root DYNEVAL-250K-IMAGES \
-  --output-dir model-responses/answers \
-  --model Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
-  --backend vllm \
-  --gpu-memory-utilization 0.70
-```
-
-Set `--tensor-parallel-size` when you want to control the number of GPUs. If omitted, the scripts use the detected CUDA GPU count.
-
-## Resume Behavior
-
-All scripts skip existing valid outputs by default. Use `--force` to regenerate outputs.
-
-Use `--start-idx` and `--end-idx` for chunked or single-image runs:
-
-```bash
-python IQA/answer.py --start-idx 0 --end-idx 1
-```
-
-## Teacher Outputs
-
-T2IA question files contain:
-
-```json
-[
-  {"question": "...", "answer": "yes"}
-]
-```
-
-T2IA answer files contain:
-
-```json
-{
-  "pair_id": "...",
-  "prompt": "...",
-  "answers": [
-    {
-      "question": "...",
-      "target_answer": "yes",
-      "reasoning": "...",
-      "score": 5
-    }
-  ],
-  "raw_response": "..."
-}
-```
-
-IQA question outputs contain:
-
-```json
-{
-  "pair_id": "...",
-  "prompt": "...",
-  "scene_graph": {},
-  "questions": [
-    {"question": "...", "answer": "no"}
-  ]
-}
-```
-
-IQA answer outputs contain:
-
-```json
-{
-  "pair_id": "...",
-  "prompt": "...",
-  "answers": [
-    {
-      "question": "...",
-      "answer": "no",
-      "target_answer": "no",
-      "correct": true
-    }
-  ],
-  "score": 5
-}
-```
+- `<\|T2IA\|>` samples are **prompt-only** (no `image` field).
+- `<\|IQA\|>` and `<\|EVALUATION\|>` samples include an `image` and start from the generated image.
 
 ## Combining IQA and T2IA Scores
 
@@ -294,7 +262,7 @@ Use `compute_overall_scores.py` to combine the IQA and T2IA scores:
 ```bash
 python compute_overall_scores.py \
   --iqa-dir iqa_answers \
-  --t2ia-dir model-responses/answers \
+  --t2ia-dir t2ia_answers \
   --output-file overall_scores.json \
   --alpha 0.5 \
   --beta 0.5
@@ -306,16 +274,4 @@ The formula is:
 overall_score = alpha * iqa_score + beta * t2ia_score
 ```
 
-`--alpha` and `--beta` default to `0.5`.
-
-The script joins files by `pair_id`, then `item_key`, then `image_id`, and finally the filename stem. It reads a top-level `score` when present. If a file has no top-level score, it averages per-answer `score` values. For boolean correctness fields, `true` is treated as `5` and `false` as `1`.
-
-To write CSV instead of JSON:
-
-```bash
-python compute_overall_scores.py \
-  --iqa-dir iqa_answers \
-  --t2ia-dir model-responses/answers \
-  --output-file overall_scores.csv \
-  --format csv
-```
+`--alpha` and `--beta` default to `0.5`. The script joins files by `pair_id`, then `item_key`, then `image_id`, and finally the filename stem. It reads a top-level `score` when present; otherwise it averages per-answer `score` values (treating boolean `correct` as `5`/`1`). Use `--format csv` to write CSV instead of JSON.
