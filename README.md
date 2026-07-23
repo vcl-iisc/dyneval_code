@@ -83,6 +83,8 @@ Place the DiffusionDB prompt file at `data/diffusiondb-prompts.txt`, or provide 
 python extract_diverse_prompts.py --input path/to/diffusiondb-prompts.txt
 ```
 
+Keep `jacordian-overlap-removel.py` and `score_prompts_qwen3_6_27b_one_dimension.py` in the same directory as the pipeline script.
+
 The script:
 
 - removes exact duplicates, prompts shorter than 30 characters, and near-duplicates;
@@ -91,7 +93,7 @@ The script:
 - assigns prompts to **Tier 1** (`score >= 200`), **Tier 2** (`100 <= score < 200`), or **Tier 3** (`score < 100`);
 - assigns semantic categories within each tier.
 
-Outputs are written under `complexity-based-scoring-part2/` in the `preprocess`, `scores`, `tiers`, and `categories` directories. Thresholds, corpus size, model settings, processing limits, resume behavior, and individual stages can be controlled through command-line arguments; run `python extract_diverse_prompts.py --help` for details.
+Outputs are written under `diverse-prompt-results/` in the `preprocess`, `scores`, `tiers`, and `categories` directories. Thresholds, corpus size, model settings, processing limits, resume behavior, and individual stages can be controlled through command-line arguments; run `python extract_diverse_prompts.py --help` for details.
 
 The resulting prompt metadata is also available in the [Hugging Face dataset](https://huggingface.co/datasets/vcl-iisc/DynEval-dataset).
 
