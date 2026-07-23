@@ -77,14 +77,24 @@ pip install -r requirements.txt
 
 ### Step 1 — Filter Diverse Prompts
 
-Run `extract_diverse_prompts.py` to filter the required prompts from DiffusionDB (a database of 1.8 billion human-written prompts).
+Place the DiffusionDB prompt file at `data/diffusiondb-prompts.txt`, or provide its location with `--input`, then run:
 
-> **Note:** The publicly available version of `extract_diverse_prompts.py` performs basic filtering. The higher-performance version is kept private.
+```bash
+python extract_diverse_prompts.py --input path/to/diffusiondb-prompts.txt
+```
 
-Once prompts are filtered, each prompt must be assigned to a category — **Tier 1**, **Tier 2**, or **Tier 3** — based on complexity.
+The script:
 
+- removes exact duplicates, prompts shorter than 30 characters, and near-duplicates;
+- scores prompt complexity with `Qwen/Qwen3.6-27B` using nine factors;
+- sorts prompts by score and builds a corpus of up to 500,000 prompts;
+- assigns prompts to **Tier 1** (`score >= 200`), **Tier 2** (`100 <= score < 200`), or **Tier 3** (`score < 100`);
+- assigns semantic categories within each tier.
 
-All such prompt info is present in the [Hugging Face dataset](https://huggingface.co/datasets/vcl-iisc/DynEval-dataset).
+Outputs are written under `complexity-based-scoring-part2/` in the `preprocess`, `scores`, `tiers`, and `categories` directories. Thresholds, corpus size, model settings, processing limits, resume behavior, and individual stages can be controlled through command-line arguments; run `python extract_diverse_prompts.py --help` for details.
+
+The resulting prompt metadata is also available in the [Hugging Face dataset](https://huggingface.co/datasets/vcl-iisc/DynEval-dataset).
+
 ---
 
 ### Step 2 — Generate Images

@@ -1,474 +1,642 @@
-import random
-import re
-import shutil
+from __future__ import annotations
+import argparse
+import importlib.util
+import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_INPUT_FILE = SCRIPT_DIR / "prompts" / "diffusiondb-prompts.txt"
-PROMPTS_DIR = SCRIPT_DIR / "prompts"
-DEFAULT_SORTED_OUTPUT = PROMPTS_DIR / "diffusiondb-prompts-sorted.txt"
-TIER_OUTPUT_FILES = {
-    1: PROMPTS_DIR / "tier-1-prompts.txt",
-    2: PROMPTS_DIR / "tier-2-prompts.txt",
-    3: PROMPTS_DIR / "tier-3-prompts.txt",
-}
+PIPELINE_DIR = SCRIPT_DIR.parent
+RESULT_ROOT = PIPELINE_DIR / "complexity-based-scoring-part2"
+PREPROCESS_DIR = RESULT_ROOT / "preprocess"
+SCORES_DIR = RESULT_ROOT / "scores"
+TIERS_DIR = RESULT_ROOT / "tiers"
+CATEGORIES_DIR = RESULT_ROOT / "categories"
 
-MIN_PROMPT_LENGTH = 30
-PROGRESS_INTERVAL = 250_000
-NUM_TIERS = 3
-TIER2_RANDOM_SEED = 42
+# Keep the default input portable by resolving it relative to this script's
+# repository. Users can still point elsewhere with the --input argument.
+DEFAULT_INPUT = PIPELINE_DIR / "data" / "diffusiondb-prompts.txt"
+DEFAULT_UNIQUE_OUT = PREPROCESS_DIR / "stage1-unique.txt"
+DEFAULT_MINLEN_OUT = PREPROCESS_DIR / "stage2-min30chars.txt"
+DEFAULT_KEPT_OUT = PREPROCESS_DIR / "stage3-deduped.txt"
+DEFAULT_REMOVED_OUT = PREPROCESS_DIR / "stage3-overlap-removed.txt"
 
-STOPWORDS = {
-    "a", "an", "the", "and", "or", "of", "in", "on", "at", "to", "for", "with",
-    "by", "from", "is", "are", "was", "were", "be", "been", "being", "it", "its",
-    "this", "that", "these", "those", "as", "into", "through", "during", "before",
-    "after", "above", "below", "up", "down", "out", "off", "over", "under", "again",
-    "very", "so", "than", "too", "also", "just", "about", "while", "where", "when",
-}
+DEFAULT_JSONL = SCORES_DIR / "nine-factor-complexity.jsonl"
+DEFAULT_TSV = SCORES_DIR / "nine-factor-complexity.tsv"
+DEFAULT_SUMMARY = SCORES_DIR / "nine-factor-summary.json"
+DEFAULT_ERROR_JSONL = SCORES_DIR / "nine-factor-errors.jsonl"
+DEFAULT_SORTED_JSON = SCORES_DIR / "nine-factor-complexity-sorted-desc.json"
 
-STYLE_ATTRIBUTION_PATTERNS = [
-    r"\bin the style of\b",
-    r"\bart by\b",
-    r"\binspired by\b",
-    r"\bpainted by\b",
-    r"\bdrawn by\b",
-    r"\bstyle of\b",
-]
-
-TECHNICAL_TERMS = {
-    "octane render", "unreal engine", "ray tracing", "raytrace", "volumetric lighting",
-    "cinematic lighting", "studio lighting", "global illumination", "depth of field",
-    "lens flare", "bokeh", "photorealistic", "hyperrealistic", "hyper realistic",
-    "8k", "4k", "uhd", "hd", "render", "cgi", "3d render", "octane", "unreal engine 5",
-    "sharp focus", "macro", "wide angle", "f/1.8", "55mm", "85mm", "35mm",
-    "chiaroscuro", "subsurface scattering", "post-processing", "matte painting",
-}
-
-DETAIL_DESCRIPTORS = {
-    "highly detailed", "hyper detailed", "hyper-detailed", "ultra detailed",
-    "extremely detailed", "very detailed", "intricate", "intricate complexity",
-    "fine details", "fine detail", "sharp focus", "masterpiece", "ultra hd",
-    "detailed portrait", "detailed illustration", "detailed painting",
-}
-
-STYLE_KEYWORDS = {
-    "cyberpunk", "baroque", "impressionist", "impressionism", "surreal", "surrealism",
-    "steampunk", "art deco", "gothic", "neo-noir", "noir", "synthwave", "vaporwave",
-    "realism", "abstract", "minimalist", "retrofuturism", "retrofuture", "fantasy",
-    "sci-fi", "anime", "pixel art", "low poly", "art nouveau", "renaissance",
-}
-
-COLORS = {
-    "red", "blue", "green", "yellow", "orange", "purple", "violet", "pink", "black",
-    "white", "gray", "grey", "brown", "gold", "golden", "silver", "crimson", "scarlet",
-    "teal", "turquoise", "cyan", "magenta", "maroon", "beige", "ivory", "amber",
-    "emerald", "sapphire", "ruby", "indigo", "lavender", "fuchsia", "neon",
-}
-
-INTERACTION_VERBS = {
-    "how", "emphasize", "support", "explain", "describe", "depict", "show", "highlight",
-    "illustrate", "demonstrate", "convey", "express", "represent", "visualize",
-}
-
-# Attribute phrases must include descriptive content after the marker.
-ATTRIBUTE_PATTERNS = [
-    r"\bwith\s+(?!out\b)(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bwearing\s+(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bholding\s+(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bfeaturing\s+(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bsurrounded\s+by\s+(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bcovered\s+(?:in|with)\s+(?:(?:a|an|the)\s+)?[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bmade\s+of\s+[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bcomposed\s+of\s+[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\bdecorated\s+with\s+[\w'-]+(?:\s+[\w'-]+){0,5}",
-    r"\badorned\s+with\s+[\w'-]+(?:\s+[\w'-]+){0,5}",
-]
-
-OBJECT_PHRASE_PATTERN = re.compile(r"\b(?:a|an|the)\s+([\w'-]+)")
-SUBJECT_BEFORE_ATTRIBUTE_PATTERN = re.compile(
-    r"\b([\w'-]+(?:\s+[\w'-]+){0,3})\s+(?:with|wearing|holding|featuring)\s+"
-)
-
-ATTRIBUTE_MARKER_WORDS = {
-    "with", "wearing", "holding", "featuring", "surrounded", "by", "covered", "in",
-    "made", "of", "composed", "decorated", "adorned", "a", "an", "the",
-}
-
-SUBJECT_LEAD_STOPWORDS = {
-    "within", "without", "through", "during", "into", "onto", "upon", "from", "of",
-    "in", "on", "at", "by", "for", "to", "the", "a", "an", "and", "or",
-}
+DEFAULT_MODEL = "Qwen/Qwen3.6-27B"
+DEFAULT_CORPUS_SIZE = 500_000
+DEFAULT_TIER1_MIN = 200.0  # score >= this → tier1
+DEFAULT_TIER2_MIN = 100.0  # tier2_min <= score < tier1_min → tier2; else tier3
 
 
-def _count_pattern_matches(text, patterns):
-    return sum(len(re.findall(pattern, text)) for pattern in patterns)
+#####
+# Load a Python file dynamically so this pipeline can reuse helper modules
+# without requiring them to be installed as packages.
+####
+def load_module_from_path(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def _count_phrase_matches(text, phrases):
-    return sum(text.count(phrase) for phrase in phrases)
-
-
-def _count_word_matches(words, vocabulary):
-    return sum(1 for word in words if word in vocabulary)
-
-
-def _content_word_count(fragment):
-    words = re.findall(r"[a-z0-9']+", fragment.lower())
-    return sum(
-        1 for word in words
-        if word not in STOPWORDS and word not in ATTRIBUTE_MARKER_WORDS and len(word) > 2
+#####
+# Load the module that implements preprocessing and complexity scoring.
+####
+def load_part1():
+    return load_module_from_path(
+        "complexity_based_scoring_part1",
+        SCRIPT_DIR / "complexity-based-scoring-part1.py",
     )
 
 
-def _is_valid_subject_phrase(phrase):
-    words = re.findall(r"[a-z0-9']+", phrase.lower())
-    if not words or words[0] in SUBJECT_LEAD_STOPWORDS:
-        return False
-    return _content_word_count(phrase) > 0
+#####
+# Load the module that assigns categories to the tiered prompts.
+####
+def load_assign():
+    return load_module_from_path(
+        "assign_prompt_categories_qwen3_6_27b",
+        SCRIPT_DIR / "assign_prompt_categories_qwen3_6_27b.py",
+    )
 
 
-def _spans_overlap(first, second):
-    return not (first[1] <= second[0] or second[1] <= first[0])
+#####
+# Read scored prompts, preferring the already-sorted JSON file and falling
+# back to the line-delimited JSON scoring output when needed.
+####
+def load_scored_records(
+    jsonl_path: Path | None, sorted_json_path: Path | None
+) -> list[dict[str, Any]]:
+    """Load scored records from sorted JSON (preferred) or score JSONL."""
+    if sorted_json_path is not None and sorted_json_path.exists():
+        data = json.loads(sorted_json_path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise SystemExit(f"Sorted JSON must be a list: {sorted_json_path}")
+        return data
 
-
-def _count_attribute_phrases(text):
-    attribute_hits = 0
-    used_spans = []
-
-    for pattern in ATTRIBUTE_PATTERNS:
-        for match in re.finditer(pattern, text):
-            span = match.span()
-            if any(_spans_overlap(span, used) for used in used_spans):
-                continue
-            if _content_word_count(match.group()) == 0:
-                continue
-            attribute_hits += 1
-            used_spans.append(span)
-
-    return attribute_hits
-
-
-def _count_object_phrases(text):
-    object_hits = 0
-    used_spans = []
-
-    for match in OBJECT_PHRASE_PATTERN.finditer(text):
-        phrase = match.group(1)
-        if _content_word_count(phrase) == 0:
-            continue
-        span = match.span(1)
-        if any(_spans_overlap(span, used) for used in used_spans):
-            continue
-        object_hits += 1
-        used_spans.append(span)
-
-    for match in SUBJECT_BEFORE_ATTRIBUTE_PATTERN.finditer(text):
-        phrase = match.group(1)
-        if not _is_valid_subject_phrase(phrase):
-            continue
-        span = match.span(1)
-        if any(_spans_overlap(span, used) for used in used_spans):
-            continue
-        object_hits += 1
-        used_spans.append(span)
-
-    if object_hits == 0:
-        leading_words = re.findall(r"[a-z0-9']+", text)
-        leading_subject = next(
-            (
-                word for word in leading_words[:4]
-                if word not in STOPWORDS
-                and word not in SUBJECT_LEAD_STOPWORDS
-                and len(word) > 2
-            ),
-            None,
+    if jsonl_path is None or not jsonl_path.exists():
+        raise SystemExit(
+            f"Need scored prompts. Missing sorted JSON and JSONL:\n"
+            f"  sorted={sorted_json_path}\n  jsonl={jsonl_path}"
         )
-        if leading_subject:
-            object_hits = 1
 
-    return object_hits
-
-
-def _parse_objects_and_attributes(text):
-    """
-    Parse object and attribute mentions using bounded phrase patterns instead of
-    naive substring matching (which mis-counts words like 'without' as 'with').
-    """
-    attribute_hits = _count_attribute_phrases(text)
-    object_hits = _count_object_phrases(text)
-    return object_hits, attribute_hits
-
-
-def compute_complexity_score(prompt):
-    """
-    Assign a heuristic complexity score from nine factors:
-    (i) prompt length, (ii) object/attribute counts, (iii) compositional density,
-    (iv) artist/style attribution, (v) technical rendering terminology,
-    (vi) explicit detail descriptors, (vii) high-level style keywords,
-    (viii) color specifications, and (ix) interaction verbs.
-    """
-    text = prompt.lower()
-    words = re.findall(r"[a-z0-9']+", text)
-    word_count = len(words)
-
-    # (i) Prompt length
-    length_score = min(word_count // 12, 4)
-
-    # (ii) Object and attribute counts
-    object_hits, attribute_hits = _parse_objects_and_attributes(text)
-    object_attribute_score = min(min(object_hits, 3) + min(attribute_hits, 3), 5)
-
-    # (iii) Compositional density via comma-separated clauses
-    clause_count = len([clause.strip() for clause in prompt.split(",") if clause.strip()])
-    compositional_score = min(max(clause_count - 1, 0), 6)
-
-    # (iv) Artist or style-attribution patterns
-    style_attribution_score = min(_count_pattern_matches(text, STYLE_ATTRIBUTION_PATTERNS), 3)
-
-    # (v) Technical rendering and fidelity terminology
-    technical_score = min(_count_phrase_matches(text, TECHNICAL_TERMS), 4)
-
-    # (vi) Explicit detail descriptors
-    detail_score = min(_count_phrase_matches(text, DETAIL_DESCRIPTORS), 3)
-
-    # (vii) High-level style keywords
-    style_keyword_score = min(_count_phrase_matches(text, STYLE_KEYWORDS), 3)
-
-    # (viii) Color specifications
-    color_score = min(_count_word_matches(words, COLORS), 3)
-
-    # (ix) Interaction verbs
-    interaction_score = min(_count_word_matches(words, INTERACTION_VERBS), 2)
-
-    breakdown = {
-        "length": length_score,
-        "object_attributes": object_attribute_score,
-        "compositional_density": compositional_score,
-        "style_attribution": style_attribution_score,
-        "technical_terms": technical_score,
-        "detail_descriptors": detail_score,
-        "style_keywords": style_keyword_score,
-        "color_specs": color_score,
-        "interaction_verbs": interaction_score,
-    }
-    total = sum(breakdown.values())
-    return total, breakdown
-
-
-def are_prompts_similar(prompt1, prompt2, similarity_threshold=0.3):
-    """
-    Check if two prompts are too similar based on word overlap.
-    Returns True if they share too many words (indicating similarity).
-    """
-    words1 = set(re.findall(r"[a-z0-9']+", prompt1.lower()))
-    words2 = set(re.findall(r"[a-z0-9']+", prompt2.lower()))
-
-    # Remove common style keywords that shouldn't affect uniqueness
-    style_words = {"artstation", "trending", "8k", "4k", "octane", "render",
-                   "detailed", "intricate", "highly", "digital", "art", "painting"}
-    words1 = words1 - style_words
-    words2 = words2 - style_words
-
-    if not words1 or not words2:
-        return False
-
-    intersection = len(words1 & words2)
-    union = len(words1 | words2)
-    if union == 0:
-        return False
-
-    return (intersection / union) > similarity_threshold
-
-
-def _score_and_sort_corpus(input_file, min_prompt_length=MIN_PROMPT_LENGTH):
-    """
-    Filter prompts shorter than min_prompt_length, score the remainder with the
-    nine-factor heuristic, and return the full corpus sorted by complexity.
-    """
-    input_path = Path(input_file)
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    print(f"Reading prompts from {input_path}...")
-
-    scored_prompts = []
-    total_prompts = 0
-    removed_short = 0
-
-    with open(input_path, "r", encoding="utf-8") as f:
-        for line in f:
-            prompt = line.strip()
-            if not prompt:
+    records = []
+    with jsonl_path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            line = line.strip()
+            if not line:
                 continue
-
-            total_prompts += 1
-            if len(prompt) < min_prompt_length:
-                removed_short += 1
-                continue
-
-            score, _ = compute_complexity_score(prompt)
-            scored_prompts.append((score, prompt))
-
-            if total_prompts % PROGRESS_INTERVAL == 0:
-                print(
-                    f"  Processed {total_prompts:,} prompts "
-                    f"({len(scored_prompts):,} kept after length filter)..."
-                )
-
-    scored_prompts.sort(key=lambda item: item[0], reverse=True)
-    print(f"Total prompts available: {total_prompts:,}")
-    print(
-        f"Removed prompts shorter than {min_prompt_length} characters: "
-        f"{removed_short:,}"
-    )
-    print(f"Scored and sorted corpus size: {len(scored_prompts):,}")
-    return scored_prompts
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(
+                    f"Invalid JSON on line {line_number} of {jsonl_path}: {exc}"
+                ) from exc
+            if "score" not in record:
+                raise SystemExit(f"Missing 'score' on line {line_number} of {jsonl_path}")
+            records.append(record)
+    return records
 
 
-def _chunk_sizes(total, num_chunks):
-    base_size = total // num_chunks
-    remainder = total % num_chunks
-    return [base_size + (1 if index < remainder else 0) for index in range(num_chunks)]
+#####
+# Sort all scored prompts from highest to lowest complexity and save them as
+# one JSON array for later tier construction.
+####
+def stage4b_sort_scores(jsonl_path: Path, sorted_json_path: Path) -> int:
+    """Sort scored prompts by final score descending → JSON array."""
+    records = load_scored_records(jsonl_path, sorted_json_path=None)
+    records.sort(key=lambda r: float(r["score"]), reverse=True)
+    sorted_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with sorted_json_path.open("w", encoding="utf-8") as handle:
+        json.dump(records, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return len(records)
 
 
-def assign_prompt_tiers(ranked_prompts, num_tiers=NUM_TIERS, random_seed=TIER2_RANDOM_SEED):
+#####
+# Convert a numeric complexity score into its configured tier name.
+####
+def tier_name_for_score(score: float, tier1_min: float, tier2_min: float) -> str:
+    if score >= tier1_min:
+        return "tier1"
+    if score >= tier2_min:
+        return "tier2"
+    return "tier3"
+
+
+#####
+# Select the highest-scoring prompts up to the requested corpus size, split
+# them into three tiers, and write prompt, record, and summary files.
+####
+def stage4c_build_tiered_corpus(
+    records: list[dict[str, Any]],
+    tiers_dir: Path,
+    corpus_size: int,
+    tier1_min: float,
+    tier2_min: float,
+) -> dict[str, Any]:
+    """Build up to ``corpus_size`` prompts into tier1/2/3 txt (+ jsonl) files.
+
+    Prompts are taken in descending score order so the highest-complexity prompts
+    fill the corpus first. Each prompt is routed to a tier by score thresholds:
+      tier1: score >= tier1_min
+      tier2: tier2_min <= score < tier1_min
+      tier3: score < tier2_min
     """
-    Split the sorted corpus into three chunks, then:
-    - Tier 1: top half of the highest-score chunk
-    - Tier 2: middle chunk shuffled randomly
-    - Tier 3: bottom half of the lowest-score chunk
-    """
-    total = len(ranked_prompts)
-    if total == 0:
-        return {}
+    tiers_dir.mkdir(parents=True, exist_ok=True)
+    ordered = sorted(records, key=lambda r: float(r["score"]), reverse=True)
 
-    sizes = _chunk_sizes(total, num_tiers)
-    start = 0
-    chunks = []
-    for size in sizes:
-        chunks.append(ranked_prompts[start:start + size])
-        start += size
+    buckets: dict[str, list[dict[str, Any]]] = {"tier1": [], "tier2": [], "tier3": []}
+    for record in ordered:
+        if sum(len(v) for v in buckets.values()) >= corpus_size:
+            break
+        prompt = str(record.get("prompt", "")).strip()
+        if not prompt:
+            continue
+        score = float(record["score"])
+        name = tier_name_for_score(score, tier1_min, tier2_min)
+        buckets[name].append(record)
 
-    top_chunk, middle_chunk, bottom_chunk = chunks
-
-    tier1 = [prompt for _, prompt in top_chunk[: len(top_chunk) // 2]]
-    tier3 = [prompt for _, prompt in bottom_chunk[len(bottom_chunk) // 2 :]]
-
-    tier2_candidates = [prompt for _, prompt in middle_chunk]
-    rng = random.Random(random_seed)
-    rng.shuffle(tier2_candidates)
-    tier2 = tier2_candidates
-
-    return {1: tier1, 2: tier2, 3: tier3}
-
-
-def _write_prompt_lines(output_path, prompts):
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        for prompt in prompts:
-            f.write(f"{prompt}\n")
-
-
-def tier_and_save_prompts(
-    input_file,
-    sorted_output_file,
-    tier_output_files,
-    min_prompt_length=MIN_PROMPT_LENGTH,
-    random_seed=TIER2_RANDOM_SEED,
-):
-    """
-    Filter by length, score the full corpus, sort by complexity, and save tiers.
-    """
-    ranked_prompts = _score_and_sort_corpus(input_file, min_prompt_length)
-    if not ranked_prompts:
-        print("No prompts remained after filtering.")
-        return
-
-    sorted_prompts = [prompt for _, prompt in ranked_prompts]
-    _write_prompt_lines(sorted_output_file, sorted_prompts)
-    print(f"Saved {len(sorted_prompts):,} sorted prompts to {sorted_output_file}")
-
-    tiers = assign_prompt_tiers(ranked_prompts, random_seed=random_seed)
-    sizes = _chunk_sizes(len(ranked_prompts), NUM_TIERS)
-    chunk_starts = [0]
-    for size in sizes[:-1]:
-        chunk_starts.append(chunk_starts[-1] + size)
-
-    tier_meta = {
-        1: (chunk_starts[0], chunk_starts[0] + sizes[0] // 2),
-        2: (chunk_starts[1], chunk_starts[1] + sizes[1]),
-        3: (chunk_starts[2] + sizes[2] // 2, chunk_starts[2] + sizes[2]),
+    summary: dict[str, Any] = {
+        "corpus_size_target": corpus_size,
+        "corpus_size_actual": sum(len(v) for v in buckets.values()),
+        "tier1_min_score": tier1_min,
+        "tier2_min_score": tier2_min,
+        "thresholds": {
+            "tier1": f"score >= {tier1_min}",
+            "tier2": f"{tier2_min} <= score < {tier1_min}",
+            "tier3": f"score < {tier2_min}",
+        },
+        "tiers": {},
     }
 
-    for tier, prompts in tiers.items():
-        output_path = tier_output_files[tier]
-        _write_prompt_lines(output_path, prompts)
-        start, end = tier_meta[tier]
-        tier_scores = [score for score, _ in ranked_prompts[start:end]]
+    for name in ("tier1", "tier2", "tier3"):
+        tier_records = buckets[name]
+        txt_path = tiers_dir / f"{name}.txt"
+        jsonl_path = tiers_dir / f"{name}.jsonl"
+        meta_path = tiers_dir / f"{name}-meta.json"
+
+        with txt_path.open("w", encoding="utf-8", newline="\n") as txt, jsonl_path.open(
+            "w", encoding="utf-8"
+        ) as jsonl:
+            for record in tier_records:
+                prompt = str(record.get("prompt", "")).replace("\n", " ").strip()
+                txt.write(prompt + "\n")
+                jsonl.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        scores = [float(r["score"]) for r in tier_records]
+        meta = {
+            "tier": name,
+            "num_prompts": len(tier_records),
+            "txt": str(txt_path),
+            "jsonl": str(jsonl_path),
+            "score_min": min(scores) if scores else None,
+            "score_max": max(scores) if scores else None,
+            "score_mean": (sum(scores) / len(scores)) if scores else None,
+        }
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        summary["tiers"][name] = meta
         print(
-            f"Tier {tier}: {len(prompts):,} prompts "
-            f"(score range {min(tier_scores)}-{max(tier_scores)}) -> {output_path}"
+            f"    {name}: {len(tier_records):,} prompts -> {txt_path.name}"
+            + (
+                f" (score {meta['score_min']:.2f} .. {meta['score_max']:.2f})"
+                if scores
+                else " (empty)"
+            )
         )
 
-    print(
-        f"\nSuccessfully tiered {len(sorted_prompts):,} prompts under {PROMPTS_DIR}"
+    summary_path = tiers_dir / "tiers-summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"    total corpus: {summary['corpus_size_actual']:,} / {corpus_size:,}")
+    print(f"    summary -> {summary_path}")
+    return summary
+
+
+#####
+# Assign semantic categories to every prompt in one tier. Existing JSONL
+# output can be resumed, and a loaded model is reused across tiers.
+####
+def stage5_assign_categories(
+    assign,
+    input_path: Path,
+    jsonl_output: Path,
+    json_output: Path,
+    summary_output: Path,
+    error_output: Path,
+    model: str,
+    max_new_tokens: int,
+    dtype: str,
+    device_map: str,
+    category_limit: int | None,
+    no_resume: bool,
+    strict_json: bool,
+    processor=None,
+    model_obj=None,
+    scorer=None,
+) -> tuple[int, int, Any, Any, Any]:
+    """Stage 5 for one tier. Reuses a preloaded model when provided.
+
+    Returns (processed_this_run, completed_total, scorer, processor, model_obj).
+    """
+    for path in (jsonl_output, json_output, summary_output, error_output):
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    if no_resume:
+        jsonl_output.unlink(missing_ok=True)
+        error_output.unlink(missing_ok=True)
+
+    records = assign.load_input_prompts(input_path)
+    total_input = len(records)
+    already_done = assign.count_jsonl_records(jsonl_output)
+    todo = records[already_done:]
+    if category_limit is not None:
+        todo = todo[:category_limit]
+
+    print(f"    input prompts : {total_input:,} ({input_path})")
+    print(f"    already done  : {already_done:,}")
+    print(f"    this run      : {len(todo):,}")
+
+    if not todo:
+        print("    nothing to do for this tier.")
+        if jsonl_output.exists():
+            assign.write_full_json(jsonl_output, json_output)
+            summary_args = SimpleNamespace(
+                input=input_path,
+                jsonl_output=jsonl_output,
+                json_output=json_output,
+                error_output=error_output,
+                model=model,
+            )
+            assign.write_summary(
+                summary_output, summary_args, total_input, already_done, jsonl_output
+            )
+        return 0, already_done, scorer, processor, model_obj
+
+    if processor is None or model_obj is None or scorer is None:
+        print("    Loading model for Stage 5...")
+        scorer = assign.load_scorer_helpers()
+        processor, model_obj = scorer.load_model(model, dtype, device_map)
+
+    from tqdm import tqdm
+
+    processed = 0
+    try:
+        with tqdm(total=len(todo), desc=f"Categories [{input_path.stem}]", unit="prompt") as progress:
+            with jsonl_output.open("a", encoding="utf-8") as jsonl, error_output.open(
+                "a", encoding="utf-8"
+            ) as err_handle:
+                for record in todo:
+                    out, error = assign.assign_categories_for_prompt(
+                        scorer,
+                        processor,
+                        model_obj,
+                        record,
+                        max_new_tokens,
+                        strict_json,
+                    )
+                    jsonl.write(json.dumps(out, ensure_ascii=False) + "\n")
+                    jsonl.flush()
+                    if error is not None:
+                        err_handle.write(json.dumps(error, ensure_ascii=False) + "\n")
+                        err_handle.flush()
+                    processed += 1
+                    progress.update(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted during Stage 5. Category JSONL is resumable.", file=sys.stderr)
+        raise
+    finally:
+        completed = already_done + processed
+        if jsonl_output.exists():
+            n = assign.write_full_json(jsonl_output, json_output)
+            summary_args = SimpleNamespace(
+                input=input_path,
+                jsonl_output=jsonl_output,
+                json_output=json_output,
+                error_output=error_output,
+                model=model,
+            )
+            assign.write_summary(
+                summary_output, summary_args, total_input, completed, jsonl_output
+            )
+            print(f"    Wrote full category JSON ({n:,} records): {json_output}")
+
+    return processed, already_done + processed, scorer, processor, model_obj
+
+
+#####
+# Define command-line options for file locations, model settings, thresholds,
+# processing limits, resume behavior, and optional stage skipping.
+####
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # ---- Preprocess I/O (stages 1-3) ----
+    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
+    parser.add_argument("--unique-output", type=Path, default=DEFAULT_UNIQUE_OUT)
+    parser.add_argument("--minlen-output", type=Path, default=DEFAULT_MINLEN_OUT)
+    parser.add_argument("--kept-output", type=Path, default=DEFAULT_KEPT_OUT)
+    parser.add_argument("--removed-output", type=Path, default=DEFAULT_REMOVED_OUT)
+    parser.add_argument("--min-chars", type=int, default=30)
+    parser.add_argument("--case-sensitive", action="store_true")
 
-def extract_diverse_prompts(
-    input_file,
-    output_file,
-    num_prompts=10,
-    sample_size=1000,
-    min_prompt_length=MIN_PROMPT_LENGTH,
-):
-    """
-    Score prompts with the nine-factor heuristic, discard short prompts,
-    rank by complexity, and greedily select diverse prompts.
-    """
-    ranked_prompts = _score_and_sort_corpus(input_file, min_prompt_length)
-    if not ranked_prompts:
-        print("No prompts remained after filtering.")
+    # ---- Stage 3 knobs ----
+    parser.add_argument("--ngram", type=int, default=3)
+    parser.add_argument("--threshold", type=float, default=0.7)
+    parser.add_argument("--num-perm", type=int, default=128)
+    parser.add_argument("--bands", type=int, default=32)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-bucket-pairs", type=int, default=64)
+    parser.add_argument("--threads", type=int, default=32)
+    parser.add_argument("--preprocess-limit", type=int, default=None)
+
+    # ---- Stage 4 (complexity scoring) ----
+    parser.add_argument("--jsonl-output", type=Path, default=DEFAULT_JSONL)
+    parser.add_argument("--tsv-output", type=Path, default=DEFAULT_TSV)
+    parser.add_argument("--summary-output", type=Path, default=DEFAULT_SUMMARY)
+    parser.add_argument("--error-output", type=Path, default=DEFAULT_ERROR_JSONL)
+    parser.add_argument("--sorted-json-output", type=Path, default=DEFAULT_SORTED_JSON)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--max-new-tokens-elements", type=int, default=400)
+    parser.add_argument("--dtype", choices=("auto", "float16", "bfloat16", "float32"), default="auto")
+    parser.add_argument("--device-map", default="auto")
+    parser.add_argument("--score-limit", type=int, default=None)
+    parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument("--strict-json", action="store_true")
+
+    # ---- Stage 4c (tiered corpus) ----
+    parser.add_argument("--tiers-dir", type=Path, default=TIERS_DIR)
+    parser.add_argument(
+        "--corpus-size",
+        type=int,
+        default=DEFAULT_CORPUS_SIZE,
+        help="Max prompts in the combined tier1+tier2+tier3 corpus (default 500000).",
+    )
+    parser.add_argument(
+        "--tier1-min-score",
+        type=float,
+        default=DEFAULT_TIER1_MIN,
+        help="Tier1 if score >= this (default 200).",
+    )
+    parser.add_argument(
+        "--tier2-min-score",
+        type=float,
+        default=DEFAULT_TIER2_MIN,
+        help="Tier2 if this <= score < tier1-min; else tier3 (default 100).",
+    )
+
+    # ---- Stage 5 (category assignment, per tier) ----
+    parser.add_argument("--categories-dir", type=Path, default=CATEGORIES_DIR)
+    parser.add_argument("--category-max-new-tokens", type=int, default=64)
+    parser.add_argument(
+        "--category-limit",
+        type=int,
+        default=None,
+        help="Max prompts to categorize PER TIER this run (default: all remaining).",
+    )
+    parser.add_argument("--no-resume-categories", action="store_true")
+
+    # ---- Flow control ----
+    parser.add_argument("--skip-preprocess", action="store_true")
+    parser.add_argument("--skip-score", action="store_true")
+    parser.add_argument("--skip-sort", action="store_true")
+    parser.add_argument("--skip-tiers", action="store_true")
+    parser.add_argument("--skip-categories", action="store_true")
+    return parser.parse_args()
+
+
+#####
+# Run the complete prompt-processing pipeline in order: preprocess, score,
+# sort, create tiers, and assign categories.
+####
+def main() -> None:
+    args = parse_args()
+    part1 = load_part1()
+    assign = load_assign()
+
+    PREPROCESS_DIR.mkdir(parents=True, exist_ok=True)
+    SCORES_DIR.mkdir(parents=True, exist_ok=True)
+    args.tiers_dir.mkdir(parents=True, exist_ok=True)
+    args.categories_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Result root: {RESULT_ROOT}")
+    print(f"  preprocess  -> {PREPROCESS_DIR}")
+    print(f"  scores      -> {SCORES_DIR}")
+    print(f"  tiers       -> {args.tiers_dir}")
+    print(f"  categories  -> {args.categories_dir}")
+
+    total1 = kept1 = total2 = kept2 = total3 = kept3 = removed3 = 0
+
+    #####
+    # Steps 1-3: remove exact duplicates, short prompts, and near-duplicates
+    # to create a clean prompt collection for scoring.
+    ####
+    if not args.skip_preprocess:
+        overlap = part1.load_overlap_module()
+
+        print("=" * 70)
+        print("Stage 1/5: removing EXACT duplicate prompts")
+        print(f"    input : {args.input}")
+        total1, kept1 = part1.stage1_remove_exact_duplicates(
+            args.input, args.unique_output, case_insensitive=not args.case_sensitive
+        )
+        print(f"    output: {args.unique_output}")
+        print(f"    read {total1:,} -> kept {kept1:,} (removed {total1 - kept1:,} exact duplicates)")
+
+        print("=" * 70)
+        print(f"Stage 2/5: removing prompts shorter than {args.min_chars} characters")
+        total2, kept2 = part1.stage2_filter_min_length(
+            args.unique_output, args.minlen_output, args.min_chars
+        )
+        print(f"    output: {args.minlen_output}")
+        print(f"    read {total2:,} -> kept {kept2:,} (removed {total2 - kept2:,} too-short prompts)")
+
+        print("=" * 70)
+        print("Stage 3/5: removing NEAR-duplicate (overlapping) prompts")
+        print(
+            f"    params: ngram={args.ngram} threshold={args.threshold} "
+            f"num_perm={args.num_perm} bands={args.bands} threads={args.threads}"
+        )
+        total3, kept3, removed3 = part1.stage3_remove_overlaps(
+            overlap,
+            args.minlen_output,
+            args.kept_output,
+            args.removed_output,
+            ngram=args.ngram,
+            threshold=args.threshold,
+            num_perm=args.num_perm,
+            bands=args.bands,
+            seed=args.seed,
+            max_bucket_pairs=args.max_bucket_pairs,
+            limit=args.preprocess_limit,
+            threads=args.threads,
+        )
+        print(f"    kept    -> {args.kept_output} ({kept3:,} prompts)")
+        print(f"    removed -> {args.removed_output} ({removed3:,} near-duplicates)")
+    else:
+        print("=" * 70)
+        print("Stages 1-3 SKIPPED (--skip-preprocess)")
+        if not args.kept_output.exists() and not args.skip_score:
+            raise SystemExit(
+                f"--skip-preprocess set but cleaned file not found: {args.kept_output}"
+            )
+
+    #####
+    # Step 4: score each cleaned prompt across nine complexity factors.
+    ####
+    score_processed = score_completed = 0
+    if not args.skip_score:
+        print("=" * 70)
+        print("Stage 4/5: scoring with Qwen3.6-27B (nine complexity factors)")
+        print(f"    input : {args.kept_output}")
+        scorer = part1.load_scorer_module()
+        score_processed, score_completed = part1.stage4_score_with_qwen27b(
+            scorer,
+            input_path=args.kept_output,
+            jsonl_output=args.jsonl_output,
+            tsv_output=args.tsv_output,
+            summary_output=args.summary_output,
+            error_output=args.error_output,
+            model=args.model,
+            max_new_tokens=args.max_new_tokens,
+            max_new_tokens_elements=args.max_new_tokens_elements,
+            dtype=args.dtype,
+            device_map=args.device_map,
+            score_limit=args.score_limit,
+            no_resume=args.no_resume,
+            strict_json=args.strict_json,
+        )
+        print(f"    scored this run : {score_processed:,}")
+        print(f"    scored total    : {score_completed:,}")
+    else:
+        print("=" * 70)
+        print("Stage 4 SKIPPED (--skip-score)")
+        print(f"    using existing scores: {args.jsonl_output}")
+
+    #####
+    # Step 4b: sort scored prompts from most to least complex.
+    ####
+    if not args.skip_sort:
+        print("=" * 70)
+        print("Stage 4b/5: sorting prompts by complexity score (descending)")
+        if not args.jsonl_output.exists():
+            raise SystemExit(f"Score JSONL not found for sorting: {args.jsonl_output}")
+        n_sorted = stage4b_sort_scores(args.jsonl_output, args.sorted_json_output)
+        print(f"    sorted {n_sorted:,} prompts -> {args.sorted_json_output}")
+    else:
+        print("=" * 70)
+        print("Stage 4b SKIPPED (--skip-sort)")
+
+    #####
+    # Step 4c: build the requested-size corpus and split it into three
+    # complexity tiers using the configured score thresholds.
+    ####
+    if not args.skip_tiers:
+        print("=" * 70)
+        print("Stage 4c/5: building tiered corpus (tier1 / tier2 / tier3)")
+        print(
+            f"    thresholds: tier1 >= {args.tier1_min_score}, "
+            f"tier2 [{args.tier2_min_score}, {args.tier1_min_score}), "
+            f"tier3 < {args.tier2_min_score}"
+        )
+        print(f"    corpus size target: {args.corpus_size:,}")
+        records = load_scored_records(args.jsonl_output, args.sorted_json_output)
+        stage4c_build_tiered_corpus(
+            records,
+            tiers_dir=args.tiers_dir,
+            corpus_size=args.corpus_size,
+            tier1_min=args.tier1_min_score,
+            tier2_min=args.tier2_min_score,
+        )
+    else:
+        print("=" * 70)
+        print("Stage 4c SKIPPED (--skip-tiers)")
+        print(f"    using existing tiers in: {args.tiers_dir}")
+
+    #####
+    # Step 5: assign the supported semantic categories within each tier,
+    # reusing one loaded model to avoid unnecessary reloads.
+    ####
+    if args.skip_categories:
+        print("=" * 70)
+        print("Stage 5 SKIPPED (--skip-categories)")
+        print("DONE.")
+        print(f"Result root: {RESULT_ROOT}")
         return
 
-    candidate_pool = ranked_prompts[: min(sample_size, len(ranked_prompts))]
-    diverse_prompts = []
+    print("=" * 70)
+    print("Stage 5/5: assigning 42 categories per tier (one category at a time)")
 
-    for score, prompt in candidate_pool:
-        if all(not are_prompts_similar(prompt, selected) for selected in diverse_prompts):
-            diverse_prompts.append(prompt)
-            print(f"Selected ({len(diverse_prompts)}/{num_prompts}) "
-                  f"[score={score}]: {prompt[:60]}...")
-            if len(diverse_prompts) >= num_prompts:
-                break
+    scorer = processor = model_obj = None
+    total_cat_processed = 0
+    total_cat_completed = 0
 
-    output_path = Path(output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        for prompt in diverse_prompts:
-            f.write(f"{prompt}\n")
+    for tier_name in ("tier1", "tier2", "tier3"):
+        tier_jsonl = args.tiers_dir / f"{tier_name}.jsonl"
+        tier_txt = args.tiers_dir / f"{tier_name}.txt"
+        # Prefer jsonl (keeps scores); fall back to txt-wrapped prompts.
+        if tier_jsonl.exists() and tier_jsonl.stat().st_size > 0:
+            input_path = tier_jsonl
+        elif tier_txt.exists() and tier_txt.stat().st_size > 0:
+            input_path = tier_txt
+        else:
+            print(f"\n  [{tier_name}] empty/missing — skipping category assignment")
+            continue
 
-    print(
-        f"\nSuccessfully extracted {len(diverse_prompts)} diverse, "
-        f"high-complexity prompts to {output_path}"
-    )
-
-
-def _cleanup_generated_artifacts():
-    cache_dir = SCRIPT_DIR / "__pycache__"
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-
-
-if __name__ == "__main__":
-    try:
-        tier_and_save_prompts(
-            input_file=DEFAULT_INPUT_FILE,
-            sorted_output_file=DEFAULT_SORTED_OUTPUT,
-            tier_output_files=TIER_OUTPUT_FILES,
-            min_prompt_length=MIN_PROMPT_LENGTH,
-            random_seed=TIER2_RANDOM_SEED,
+        tier_cat_dir = args.categories_dir / tier_name
+        print(f"\n  [{tier_name}] classifying -> {tier_cat_dir}")
+        processed, completed, scorer, processor, model_obj = stage5_assign_categories(
+            assign,
+            input_path=input_path,
+            jsonl_output=tier_cat_dir / "prompt-category-assignments.jsonl",
+            json_output=tier_cat_dir / "prompt-category-assignments.json",
+            summary_output=tier_cat_dir / "prompt-category-assignments-summary.json",
+            error_output=tier_cat_dir / "prompt-category-assignments-errors.jsonl",
+            model=args.model,
+            max_new_tokens=args.category_max_new_tokens,
+            dtype=args.dtype,
+            device_map=args.device_map,
+            category_limit=args.category_limit,
+            no_resume=args.no_resume_categories,
+            strict_json=args.strict_json,
+            processor=processor,
+            model_obj=model_obj,
+            scorer=scorer,
         )
-    finally:
-        _cleanup_generated_artifacts()
+        total_cat_processed += processed
+        total_cat_completed += completed
+
+    print("=" * 70)
+    print("DONE.")
+    print(f"Result root: {RESULT_ROOT}")
+    if not args.skip_preprocess:
+        print(
+            f"    preprocess: {total1:,} raw -> {kept1:,} unique -> "
+            f"{kept2:,} >= {args.min_chars} chars -> {kept3:,} after overlap removal"
+        )
+    if not args.skip_score:
+        print(f"    scored this run : {score_processed:,}")
+        print(f"    scored total    : {score_completed:,}")
+    print(f"    categorized this run : {total_cat_processed:,}")
+    print(f"    categorized total    : {total_cat_completed:,}")
+    print(f"    tiers dir      : {args.tiers_dir}")
+    print(f"    categories dir : {args.categories_dir}")
+
+
+#####
+# Start the pipeline only when this file is executed directly.
+####
+if __name__ == "__main__":
+    main()
